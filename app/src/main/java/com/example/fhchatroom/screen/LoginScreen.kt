@@ -20,13 +20,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
 
+    onNavigateToSignUp: () -> Unit
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember {
@@ -69,13 +69,8 @@ fun LoginScreen(
         }
         Spacer(modifier = Modifier.height(16.dp))
         Text("Don't have an account? Sign up.",
-            modifier = Modifier.clickable {  }
+            modifier = Modifier.clickable { onNavigateToSignUp() }
         )
     }
 }
 
-@Preview
-@Composable
-fun LoginPreview() {
-    LoginScreen()
-}
