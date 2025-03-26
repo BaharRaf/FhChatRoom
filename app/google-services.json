@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1083643615271",
+    "project_id": "fhchatroom-d00a3",
+    "storage_bucket": "fhchatroom-d00a3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1083643615271:android:dcd9180a31a22b945d1602",
+        "android_client_info": {
+          "package_name": "com.example.fhchatroom"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAmTwGmd2lNVy6_f4-j--AB0ms9i2G4XV4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
