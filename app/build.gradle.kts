@@ -60,11 +60,17 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
 
     //Import firebase BoM
-    implementation(platform("com.google.firebase:firebase-bom:33.11.0"))
+    implementation(platform(libs.firebase.bom))
     // TODO: Add the dependencies for Firebase products you want to use
     // When using the BoM, don't specify versions in Firebase dependencies
-    implementation("com.google.firebase:firebase-analytics")
+    implementation(libs.firebase.analytics)
     // https://firebase.google.com/docs/android/setup#available-libraries
+
+
+    //navigation
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.runtime.livedata)
 
 
 
