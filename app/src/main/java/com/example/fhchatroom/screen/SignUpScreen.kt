@@ -75,7 +75,7 @@ fun SignUpScreen(
         )
         Button(
             onClick = {
-               // authViewModel.signUp(email, password, firstName, lastName)
+                authViewModel.signUp(email, password, firstName, lastName)
                 email = ""
                 password = ""
                 firstName = ""
