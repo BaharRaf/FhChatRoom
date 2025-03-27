@@ -33,7 +33,8 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-
+                    // Call the navigation graph here!
+                    NavigationGraph(navController = navController)
                 }
             }
         }
