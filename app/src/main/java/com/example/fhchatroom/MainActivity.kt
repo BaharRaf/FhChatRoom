@@ -15,6 +15,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.fhchatroom.screen.ChatRoomListScreen
 import com.example.fhchatroom.screen.LoginScreen
 import com.example.fhchatroom.screen.SignUpScreen
 import com.example.fhchatroom.ui.theme.ChatRoomAppTheme
@@ -68,6 +69,9 @@ fun NavigationGraph(
                 onNavigateToSignUp = { navController.navigate(Screen.SignupScreen.route) }
             ){
                 navController.navigate(Screen.ChatRoomsScreen.route)
+            }
+            composable(Screen.ChatRoomsScreen.route) {
+                ChatRoomListScreen ()
             }
         }
     }
