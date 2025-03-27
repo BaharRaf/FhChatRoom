@@ -1,16 +1,13 @@
 package com.example.fhchatroom.screen
-import androidx.compose.foundation.layout.Arrangement
+
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -22,6 +19,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.fhchatroom.Screen
+import com.example.fhchatroom.ui.theme.ChatRoomAppTheme
 
 @Composable
 fun ChatRoomListScreen() {
@@ -49,47 +48,13 @@ fun ChatRoomListScreen() {
         ) {
             Text("Create ChatRoom")
         }
-        if (showDialog){
-            AlertDialog( onDismissRequest = { showDialog = true },
-                title = { Text("Create a new room") },
-                text={
-                    OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp)
-                    )
-                }, confirmButton = {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Button(
-                            onClick = {
-                                if (name.isNotBlank()) {
-                                    showDialog = false
 
-                                }
-                            }
-                        ) {
-                            Text("Add")
-                        }
-                        Button(
-                            onClick = { showDialog = false }
-                        ) {
-                            Text("Cancel")
-                        }
-                    }
-                })
-        }
     }
 }
-@Preview
+@Preview(showBackground = true)
 @Composable
-fun ChatRoomListScreenPreview() {
-        ChatRoomListScreen()
+fun ChatRoomsScreenPreview() {
+    ChatRoomAppTheme {
+        
+    }
 }
