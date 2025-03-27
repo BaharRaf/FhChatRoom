@@ -70,12 +70,19 @@ fun NavigationGraph(
             ){
                 navController.navigate(Screen.ChatRoomsScreen.route)
             }
+
             composable(Screen.ChatRoomsScreen.route) {
-                ChatRoomListScreen ()
+                ChatRoomListScreen {
+                    navController.navigate("${Screen.ChatScreen.route}/${it.id}")
+                }
             }
+
+
         }
     }
+
 }
+
 
 
 
