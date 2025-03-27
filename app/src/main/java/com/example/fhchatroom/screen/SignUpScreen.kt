@@ -24,16 +24,17 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.fhchatroom.ui.theme.ChatRoomAppTheme
-
-//import com.example.fhchatroom.viewmodel.AuthViewModel
+import com.example.fhchatroom.viewmodel.AuthViewModel
 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SignUpScreen(
-
+    authViewModel: AuthViewModel,
     onNavigateToLogin: () -> Unit
 ){
+
+
 
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -90,10 +91,4 @@ fun SignUpScreen(
         )
     }
 }
-@Preview(showBackground = true)
-@Composable
-fun SignUpScreenPreview() {
-    ChatRoomAppTheme {
-        SignUpScreen(onNavigateToLogin = {})
-    }
-}
+
