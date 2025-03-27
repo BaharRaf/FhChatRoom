@@ -66,7 +66,7 @@ fun NavigationGraph(
 
 @Preview(showBackground = true)
 @Composable
-fun GreetingPreview() {
+fun MainActivityPreview() {
     ChatRoomAppTheme {
 
     }

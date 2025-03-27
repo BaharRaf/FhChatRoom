@@ -21,7 +21,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.example.fhchatroom.ui.theme.ChatRoomAppTheme
+
 //import com.example.fhchatroom.viewmodel.AuthViewModel
 
 
@@ -87,4 +90,10 @@ fun SignUpScreen(
         )
     }
 }
-
+@Preview(showBackground = true)
+@Composable
+fun SignUpScreenPreview() {
+    ChatRoomAppTheme {
+        SignUpScreen(onNavigateToLogin = {})
+    }
+}
