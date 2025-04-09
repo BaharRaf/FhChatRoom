@@ -15,6 +15,7 @@ class RoomViewModel : ViewModel() {
     private val _rooms = MutableLiveData<List<Room>>()
     val rooms: LiveData<List<Room>> get() = _rooms
     private val roomRepository: RoomRepository
+
     init {
         roomRepository = RoomRepository(Injection.instance())
         loadRooms()
@@ -22,7 +23,10 @@ class RoomViewModel : ViewModel() {
 
     fun createRoom(name: String) {
         viewModelScope.launch {
+            // Create the room via repository
             roomRepository.createRoom(name)
+            // Refresh the room list so the new room appears in the UI.
+            loadRooms()
         }
     }
 
@@ -31,10 +35,9 @@ class RoomViewModel : ViewModel() {
             when (val result = roomRepository.getRooms()) {
                 is Success -> _rooms.value = result.data
                 is Error -> {
-
+                    // Optionally log or handle the error here.
                 }
             }
         }
     }
-
 }
