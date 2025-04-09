@@ -61,17 +61,17 @@ fun ChatRoomListScreen(
         Button(
             onClick = {
                 showDialog = true
-            },
+                      },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Create Room")
         }
 
-
-        if (showDialog){
-            AlertDialog( onDismissRequest = { showDialog = true },
+        if (showDialog) {
+            AlertDialog(
+                onDismissRequest = { showDialog = false },
                 title = { Text("Create a new room") },
-                text={
+                text = {
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
@@ -80,7 +80,8 @@ fun ChatRoomListScreen(
                             .fillMaxWidth()
                             .padding(8.dp)
                     )
-                }, confirmButton = {
+                },
+                confirmButton = {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -90,20 +91,28 @@ fun ChatRoomListScreen(
                         Button(
                             onClick = {
                                 if (name.isNotBlank()) {
+                                    // Call a function in your RoomViewModel to create a room
+                                    roomViewModel.createRoom(name)
+                                    // Clear the input field and dismiss dialog
+                                    name = ""
                                     showDialog = false
-
                                 }
                             }
                         ) {
                             Text("Add")
                         }
                         Button(
-                            onClick = { showDialog = false }
+                            onClick = {
+                                // Cancel dialog and clear input
+                                showDialog = false
+                                name = ""
+                            }
                         ) {
                             Text("Cancel")
                         }
                     }
-                })
+                }
+            )
         }
     }
 }
@@ -111,7 +120,7 @@ fun ChatRoomListScreen(
 @Preview
 @Composable
 fun RoomListPreview() {
-    ChatRoomListScreen(){}
+    ChatRoomListScreen { }
 }
 
 @Composable
@@ -134,6 +143,5 @@ fun RoomItem(room: Room, onJoinClicked: (Room) -> Unit) {
 @Preview
 @Composable
 fun ItemPreview() {
-    RoomItem(room = Room("id.com","Name")){}
+    RoomItem(room = Room("id.com", "Name")) { }
 }
-
