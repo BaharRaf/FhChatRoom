@@ -28,19 +28,13 @@ class MainActivity : ComponentActivity() {
         setContent {
             val navController = rememberNavController()
             val authViewModel: AuthViewModel = viewModel()
-
             ChatRoomAppTheme {
                 // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // Call the navigation graph here!
-                    NavigationGraph(
-                        navController = navController,
-                        authViewModel = authViewModel
-
-                    )
+                    NavigationGraph(navController = navController, authViewModel = authViewModel)
                 }
             }
         }
@@ -62,33 +56,31 @@ fun NavigationGraph(
                 onNavigateToLogin = { navController.navigate(Screen.LoginScreen.route) }
             )
         }
-
         composable(Screen.LoginScreen.route) {
             LoginScreen(
                 authViewModel = authViewModel,
                 onNavigateToSignUp = { navController.navigate(Screen.SignupScreen.route) }
-            ){
+            ) {
                 navController.navigate(Screen.ChatRoomsScreen.route)
             }
-
-            composable(Screen.ChatRoomsScreen.route) {
-                ChatRoomListScreen {
-                    navController.navigate("${Screen.ChatScreen.route}/${it.id}")
-                }
+        }
+        composable(Screen.ChatRoomsScreen.route) {
+            ChatRoomListScreen {
+                navController.navigate("${Screen.ChatScreen.route}/${it.id}")
             }
+        }
 
+        composable("${Screen.ChatScreen.route}/{roomId}") {
+            val roomId: String = it
+                .arguments?.getString("roomId") ?: ""
 
         }
     }
-
 }
-
-
-
 
 @Preview(showBackground = true)
 @Composable
-fun MainActivityPreview() {
+fun GreetingPreview() {
     ChatRoomAppTheme {
 
     }
