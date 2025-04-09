@@ -37,14 +37,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fhchatroom.R
+import com.example.fhchatroom.viewmodel.MessageViewModel
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun ChatScreen(  roomId: String) {
-
+fun ChatScreen(
+    roomId: String,
+    messageViewModel:
+    MessageViewModel = viewModel(),
+) {
+    val messages by messageViewModel.messages.observeAsState(emptyList())
+    messageViewModel.setRoomId(roomId)
     val text = remember { mutableStateOf("") }
     Column(
         modifier = Modifier
@@ -54,10 +61,13 @@ fun ChatScreen(  roomId: String) {
         // Display the chat messages
         LazyColumn(
             modifier = Modifier.weight(1f)
-        ) {
-
+        )  {
+            items(messages) { message ->
+                ChatMessageItem(message =  message.copy(isSentByCurrentUser
+                = message.senderId == messageViewModel.currentUser.value?.email)
+                )
+            }
         }
-
         // Chat input field and send icon
         Row(
             modifier = Modifier
@@ -78,17 +88,20 @@ fun ChatScreen(  roomId: String) {
                 onClick = {
                     // Send the message when the icon is clicked
                     if (text.value.isNotEmpty()) {
-
+                        messageViewModel.sendMessage(text.value.trim())
                         text.value = ""
                     }
-
+                    messageViewModel.loadMessages()
                 }
-            ){
+            ) {
                 Icon(imageVector = Icons.Default.Send, contentDescription = "Send")
             }
         }
     }
 }
+
+
+@RequiresApi(Build.VERSION_CODES.O)
 @Preview
 @Composable
 fun ChatPreview() {
