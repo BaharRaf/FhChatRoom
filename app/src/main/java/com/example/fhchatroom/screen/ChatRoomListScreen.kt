@@ -28,45 +28,45 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.fhchatroom.viewmodel.RoomViewModel
 import com.example.fhchatroom.data.Room
+import com.example.fhchatroom.viewmodel.RoomViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatRoomListScreen(
     roomViewModel: RoomViewModel = viewModel(),
-    onJoinClicked: (Room) -> Unit
+    onJoinClicked: (Room) -> Unit,
+    onLogout: () -> Unit  // Callback to handle logout navigation.
 ) {
     val rooms by roomViewModel.rooms.observeAsState(emptyList())
     var showDialog by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Text("Chat Rooms", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(16.dp))
+        // Include the top app bar with the Logout button.
+        ChatAppTopBar(onLogout = onLogout)
 
-        // Display a list of chat rooms
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // (Other UI elements for displaying chat rooms, create room, etc.)
         LazyColumn {
             items(rooms) { room ->
-                RoomItem(room = room, onJoinClicked = {onJoinClicked(room)})
+                RoomItem(room = room, onJoinClicked = { onJoinClicked(room) })
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Button to create a new room
         Button(
-            onClick = {
-                showDialog = true
-                      },
+            onClick = { showDialog = true },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Create Room")
         }
-
         if (showDialog) {
             AlertDialog(
                 onDismissRequest = { showDialog = false },
@@ -91,9 +91,7 @@ fun ChatRoomListScreen(
                         Button(
                             onClick = {
                                 if (name.isNotBlank()) {
-                                    // Call a function in your RoomViewModel to create a room
                                     roomViewModel.createRoom(name)
-                                    // Clear the input field and dismiss dialog
                                     name = ""
                                     showDialog = false
                                 }
@@ -103,7 +101,6 @@ fun ChatRoomListScreen(
                         }
                         Button(
                             onClick = {
-                                // Cancel dialog and clear input
                                 showDialog = false
                                 name = ""
                             }
@@ -117,11 +114,6 @@ fun ChatRoomListScreen(
     }
 }
 
-@Preview
-@Composable
-fun RoomListPreview() {
-    ChatRoomListScreen { }
-}
 
 @Composable
 fun RoomItem(room: Room, onJoinClicked: (Room) -> Unit) {
@@ -138,6 +130,15 @@ fun RoomItem(room: Room, onJoinClicked: (Room) -> Unit) {
             Text("Join")
         }
     }
+}
+
+@Preview
+@Composable
+fun RoomListPreview() {
+    ChatRoomListScreen(
+        onJoinClicked = { },
+        onLogout = { }
+    )
 }
 
 @Preview

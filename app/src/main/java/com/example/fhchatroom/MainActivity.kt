@@ -66,9 +66,10 @@ fun NavigationGraph(
             }
         }
         composable(Screen.ChatRoomsScreen.route) {
-            ChatRoomListScreen {
-                navController.navigate("${Screen.ChatScreen.route}/${it.id}")
-            }
+            ChatRoomListScreen(
+                onJoinClicked = { room -> navController.navigate("${Screen.ChatScreen.route}/${room.id}") },
+                onLogout = { navController.navigate(Screen.LoginScreen.route) }
+            )
         }
 
         composable("${Screen.ChatScreen.route}/{roomId}") {
