@@ -20,13 +20,16 @@ class AuthViewModel : ViewModel() {
         )
     }
 
-    private val _authResult = MutableLiveData<Result<Boolean>>()
-    val authResult: LiveData<Result<Boolean>> get() = _authResult
+    private val _authResult = MutableLiveData<Result<Boolean>?>()
+    val authResult: MutableLiveData<Result<Boolean>?> get() = _authResult
 
     fun signUp(email: String, password: String, firstName: String, lastName: String) {
         viewModelScope.launch {
             _authResult.value = userRepository.signUp(email, password, firstName, lastName)
         }
+    }
+    fun clearAuthResult() {
+        _authResult.value = null
     }
 
     fun login(email: String, password: String) {

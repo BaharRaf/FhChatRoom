@@ -1,28 +1,22 @@
 package com.example.fhchatroom.screen
 
+import android.widget.Toast
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
+import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import com.example.fhchatroom.viewmodel.AuthViewModel
+import com.example.fhchatroom.data.Result
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,13 +29,15 @@ fun SignUpScreen(
     var firstName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
+    val result by authViewModel.authResult.observeAsState()
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.Center,
-        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         OutlinedTextField(
             value = email,
@@ -94,7 +90,7 @@ fun SignUpScreen(
                 } else {
                     errorMessage = ""
                     authViewModel.signUp(email, password, firstName, lastName)
-                    // Clear the input fields after sign up.
+                    // Clear the input fields after attempting sign up.
                     email = ""
                     password = ""
                     firstName = ""
@@ -113,5 +109,19 @@ fun SignUpScreen(
             text = "Already have an account? Sign in.",
             modifier = Modifier.clickable { onNavigateToLogin() }
         )
+    }
+
+    // Show Toast messages for sign-up success or failure
+    LaunchedEffect(result) {
+        when (val r = result) {
+            is Result.Success -> {
+                Toast.makeText(context, "Account created successfully", Toast.LENGTH_SHORT).show()
+                onNavigateToLogin()
+            }
+            is Result.Error -> {
+                Toast.makeText(context, "Sign up failed: ${r.exception.message}", Toast.LENGTH_LONG).show()
+            }
+            else -> {}
+        }
     }
 }

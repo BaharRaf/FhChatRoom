@@ -3,72 +3,71 @@ package com.example.fhchatroom.viewmodel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.example.fhchatroom.Injection
-import com.example.fhchatroom.data.Result.*
 import com.example.fhchatroom.data.Room
-import com.example.fhchatroom.data.RoomRepository
-import kotlinx.coroutines.launch
-import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.ktx.toObject
 
 class RoomViewModel : ViewModel() {
 
     private val _rooms = MutableLiveData<List<Room>>()
     val rooms: LiveData<List<Room>> get() = _rooms
-    private val roomRepository: RoomRepository
+
+    private val firestore = Injection.instance()
+    private var roomListener: ListenerRegistration? = null
 
     init {
-        roomRepository = RoomRepository(Injection.instance())
-        loadRooms()
+        observeRoomsInRealTime()
     }
 
-    fun createRoom(name: String) {
-        viewModelScope.launch {
-            // Create the room via repository
-            val email = FirebaseAuth.getInstance().currentUser?.email
-            if (email != null) {
-                roomRepository.createRoom(name, email)
-            }
-            // Refresh the room list so the new room appears in the UI.
-            loadRooms()
-        }
-    }
+    private fun observeRoomsInRealTime() {
+        roomListener = firestore.collection("rooms")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    return@addSnapshotListener
+                }
 
-    fun loadRooms() {
-        viewModelScope.launch {
-            when (val result = roomRepository.getRooms()) {
-                is Success -> _rooms.value = result.data
-                is Error -> {
-                    // Optionally log or handle the error here.
+                if (snapshot != null) {
+                    val updatedRooms = snapshot.documents.mapNotNull { doc ->
+                        val room = doc.toObject<Room>()
+                        room?.copy(id = doc.id)
+                    }
+                    _rooms.value = updatedRooms
                 }
             }
-        }
     }
-    //join then reload list
+
+    override fun onCleared() {
+        super.onCleared()
+        roomListener?.remove()
+    }
+
+    fun createRoom(name: String, description: String) {
+        val currentUserEmail = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email
+        val newRoom = Room(
+            name = name,
+            description = description,
+            members = currentUserEmail?.let { listOf(it) } ?: emptyList()
+        )
+        firestore.collection("rooms").add(newRoom)
+    }
+
     fun joinRoom(roomId: String) {
-        viewModelScope.launch {
-            val email = FirebaseAuth.getInstance().currentUser?.email
-            if (email != null) {
-                roomRepository.joinRoom(roomId, email)
-                loadRooms()
-            }
-        }
+        val email = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: return
+        firestore.collection("rooms")
+            .document(roomId)
+            .update("members", com.google.firebase.firestore.FieldValue.arrayUnion(email))
     }
-    //leave then reload list
+
     fun leaveRoom(roomId: String) {
-        viewModelScope.launch {
-            val email = FirebaseAuth.getInstance().currentUser?.email
-            if (email != null) {
-                roomRepository.leaveRoom(roomId, email)
-                loadRooms()
-            }
-        }
+        val email = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: return
+        firestore.collection("rooms")
+            .document(roomId)
+            .update("members", com.google.firebase.firestore.FieldValue.arrayRemove(email))
     }
-    //delete then reload list
+
     fun deleteRoom(roomId: String) {
-        viewModelScope.launch {
-            roomRepository.deleteRoom(roomId)
-            loadRooms()
-        }
+        firestore.collection("rooms").document(roomId).delete()
     }
 }

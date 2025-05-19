@@ -1,13 +1,16 @@
 package com.example.fhchatroom.data
 
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
-import com.google.firebase.firestore.FieldValue
 
 class RoomRepository(private val firestore: FirebaseFirestore) {
 
-    suspend fun createRoom(name: String, creatorEmail: String): Result<Unit> = try {
-        val room = Room(name = name, createdBy = creatorEmail, members = listOf(creatorEmail))
+    suspend fun createRoom(name: String, description: String): Result<Unit> = try {
+        val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email
+        val initialMembers = if (currentUserEmail != null) listOf(currentUserEmail) else emptyList()
+        val room = Room(name = name, description = description, members = initialMembers)
         firestore.collection("rooms").add(room).await()
         Result.Success(Unit)
     } catch (e: Exception) {
@@ -23,25 +26,12 @@ class RoomRepository(private val firestore: FirebaseFirestore) {
     } catch (e: Exception) {
         Result.Error(e)
     }
-    // add current user to room’s members array
-    suspend fun joinRoom(roomId: String, userEmail: String): Result<Unit> = try {
+
+    suspend fun joinRoom(roomId: String): Result<Unit> = try {
+        val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email
+            ?: throw Exception("User not logged in")
         firestore.collection("rooms").document(roomId)
-            .update("members", FieldValue.arrayUnion(userEmail)).await()
-        Result.Success(Unit)
-    } catch (e: Exception) {
-        Result.Error(e)
-    }
-    //remove user from room’s members array
-    suspend fun leaveRoom(roomId: String, userEmail: String): Result<Unit> = try {
-        firestore.collection("rooms").document(roomId)
-            .update("members", FieldValue.arrayRemove(userEmail)).await()
-        Result.Success(Unit)
-    } catch (e: Exception) {
-        Result.Error(e)
-    }
-    // delete room document entirely
-    suspend fun deleteRoom(roomId: String): Result<Unit> = try {
-        firestore.collection("rooms").document(roomId).delete().await()
+            .update("members", FieldValue.arrayUnion(currentUserEmail)).await()
         Result.Success(Unit)
     } catch (e: Exception) {
         Result.Error(e)
