@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,13 +31,14 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fhchatroom.data.Room
 import com.example.fhchatroom.viewmodel.RoomViewModel
+import com.google.firebase.auth.FirebaseAuth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatRoomListScreen(
     roomViewModel: RoomViewModel = viewModel(),
     onJoinClicked: (Room) -> Unit,
-    onLogout: () -> Unit  // Callback to handle logout navigation.
+    onLogout: () -> Unit
 ) {
     val rooms by roomViewModel.rooms.observeAsState(emptyList())
     var showDialog by remember { mutableStateOf(false) }
@@ -52,7 +54,7 @@ fun ChatRoomListScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // (Other UI elements for displaying chat rooms, create room, etc.)
+        // List of chat rooms
         LazyColumn {
             items(rooms) { room ->
                 RoomItem(room = room, onJoinClicked = { onJoinClicked(room) })
@@ -114,9 +116,14 @@ fun ChatRoomListScreen(
     }
 }
 
-
 @Composable
 fun RoomItem(room: Room, onJoinClicked: (Room) -> Unit) {
+    val roomViewModel: RoomViewModel = viewModel()
+    val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email
+    val isMember = currentUserEmail != null && room.members.contains(currentUserEmail)
+    //check if current user created this room
+    val isCreator = currentUserEmail != null && room.createdBy == currentUserEmail
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -124,10 +131,46 @@ fun RoomItem(room: Room, onJoinClicked: (Room) -> Unit) {
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(text = room.name, fontSize = 16.sp, fontWeight = FontWeight.Normal)
-        OutlinedButton(
-            onClick = { onJoinClicked(room) }
-        ) {
-            Text("Join")
+        Row {
+            if (!isMember) {
+                OutlinedButton(
+                    onClick = {
+                        if (currentUserEmail != null) {
+                            roomViewModel.joinRoom(room.id)
+                        }
+                        onJoinClicked(room)
+                    }
+                ) {
+                    Text("Join")
+                }
+            } else {
+                //join→enter for existing members
+                OutlinedButton(
+                    onClick = { onJoinClicked(room) }
+                ) {
+                    Text("Enter")
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                if (isCreator) {
+                    //only creator sees Delete
+                    OutlinedButton(
+                        onClick = {
+                            roomViewModel.deleteRoom(room.id)
+                        }
+                    ) {
+                        Text("Delete")
+                    }
+                } else {
+                    //non-creator members see Leave
+                    OutlinedButton(
+                        onClick = {
+                            roomViewModel.leaveRoom(room.id)
+                        }
+                    ) {
+                        Text("Leave")
+                    }
+                }
+            }
         }
     }
 }
