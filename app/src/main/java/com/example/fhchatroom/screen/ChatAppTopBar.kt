@@ -1,7 +1,7 @@
 package com.example.fhchatroom.screen
 
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -18,16 +18,16 @@ fun ChatAppTopBar(
     TopAppBar(
         title = { Text("Chat Rooms") },
         actions = {
-            Button(
-                onClick = {
-                    // Sign out from Firebase authentication and perform any additional backend logout if necessary.
-                    FirebaseAuth.getInstance().signOut()
-                    onLogout()
-                },
-                modifier = Modifier.padding(end = 8.dp)
-            ) {
-                Text("Logout")
-            }
+            Text(
+                text = "Logout",
+                modifier = Modifier
+                    .clickable {
+                        // Sign out from Firebase authentication
+                        FirebaseAuth.getInstance().signOut()
+                        onLogout()
+                    }
+                    .padding(end = 8.dp)
+            )
         }
     )
 }
