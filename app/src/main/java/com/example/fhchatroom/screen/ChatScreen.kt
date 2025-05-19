@@ -1,8 +1,6 @@
 package com.example.fhchatroom.screen
 
 import android.os.Build
-import com.example.fhchatroom.data.Message
-import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -37,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fhchatroom.R
+import com.example.fhchatroom.data.Message
 import com.example.fhchatroom.viewmodel.MessageViewModel
 import java.time.Instant
 import java.time.LocalDateTime
@@ -47,80 +46,76 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun ChatScreen(
     roomId: String,
-    messageViewModel:
-    MessageViewModel = viewModel(),
+    messageViewModel: MessageViewModel = viewModel(),
 ) {
+    // Observe messages and current user
     val messages by messageViewModel.messages.observeAsState(emptyList())
     messageViewModel.setRoomId(roomId)
-    val text = remember { mutableStateOf("") }
+    val currentUserEmail = messageViewModel.currentUser.observeAsState().value?.email
+
+    // Input state
+    val textState = remember { mutableStateOf("") }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Display the chat messages
-        LazyColumn(
-            modifier = Modifier.weight(1f)
-        )  {
-            items(messages) { message ->
-                ChatMessageItem(message =  message.copy(isSentByCurrentUser
-                = message.senderId == messageViewModel.currentUser.value?.email)
-                )
+        // Message list
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            items(messages) { msg ->
+                // tag each message with ownership
+                val owned = msg.senderId == currentUserEmail
+                ChatMessageItem(message = msg.copy(isSentByCurrentUser = owned))
             }
         }
-        // Chat input field and send icon
+
+        // Input row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
+                .padding(top = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             BasicTextField(
-                value = text.value,
-                onValueChange = { text.value = it },
-                textStyle = TextStyle.Default.copy(fontSize = 16.sp),
+                value = textState.value,
+                onValueChange = { textState.value = it },
+                textStyle = TextStyle(fontSize = 16.sp),
                 modifier = Modifier
                     .weight(1f)
                     .padding(8.dp)
             )
-
-            IconButton(
-                onClick = {
-                    // Send the message when the icon is clicked
-                    if (text.value.isNotEmpty()) {
-                        messageViewModel.sendMessage(text.value.trim())
-                        text.value = ""
-                    }
+            IconButton(onClick = {
+                val content = textState.value.trim()
+                if (content.isNotEmpty()) {
+                    messageViewModel.sendMessage(content)
+                    textState.value = ""
                     messageViewModel.loadMessages()
                 }
-            ) {
+            }) {
                 Icon(imageVector = Icons.Default.Send, contentDescription = "Send")
             }
         }
     }
 }
 
-
-@RequiresApi(Build.VERSION_CODES.O)
-@Preview
-@Composable
-fun ChatPreview() {
-    ChatScreen(roomId = "")
-}
-
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun ChatMessageItem(message: Message) {
+    //Moved ChatMessageItem into this file to fix unresolved reference
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp),
+            .padding(4.dp),
         horizontalAlignment = if (message.isSentByCurrentUser) Alignment.End else Alignment.Start
     ) {
         Box(
             modifier = Modifier
                 .background(
-                    if (message.isSentByCurrentUser) colorResource(id = R.color.purple_700) else Color.Gray,
+                    color = if (message.isSentByCurrentUser)
+                        colorResource(id = R.color.purple_700)
+                    else
+                        Color.Gray,
                     shape = RoundedCornerShape(8.dp)
                 )
                 .padding(8.dp)
@@ -131,51 +126,33 @@ fun ChatMessageItem(message: Message) {
                 style = TextStyle(fontSize = 16.sp)
             )
         }
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = message.senderFirstName,
-            style = TextStyle(
-                fontSize = 12.sp,
-                color = Color.Gray
-            )
+            style = TextStyle(fontSize = 12.sp, color = Color.LightGray)
         )
         Text(
-            text = formatTimestamp(message.timestamp), // Replace with actual timestamp logic
-            style = TextStyle(
-                fontSize = 12.sp,
-                color = Color.Gray
-            )
+            text = formatTimestamp(message.timestamp),
+            style = TextStyle(fontSize = 12.sp, color = Color.LightGray)
         )
     }
 }
 
 @RequiresApi(Build.VERSION_CODES.O)
 private fun formatTimestamp(timestamp: Long): String {
-    val messageDateTime =
-        LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault())
+    val dt = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault())
     val now = LocalDateTime.now()
-
+    val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
     return when {
-        isSameDay(messageDateTime, now) -> "today ${formatTime(messageDateTime)}"
-        isSameDay(messageDateTime.plusDays(1), now) -> "yesterday ${formatTime(messageDateTime)}"
-        else -> formatDate(messageDateTime)
+        dt.toLocalDate() == now.toLocalDate() -> "today ${dt.format(timeFmt)}"
+        dt.toLocalDate().plusDays(1) == now.toLocalDate() -> "yesterday ${dt.format(timeFmt)}"
+        else -> dt.format(DateTimeFormatter.ofPattern("MMM d, yyyy"))
     }
 }
 
 @RequiresApi(Build.VERSION_CODES.O)
-private fun isSameDay(dateTime1: LocalDateTime, dateTime2: LocalDateTime): Boolean {
-    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-    return dateTime1.format(formatter) == dateTime2.format(formatter)
-}
-
-@RequiresApi(Build.VERSION_CODES.O)
-private fun formatTime(dateTime: LocalDateTime): String {
-    val formatter = DateTimeFormatter.ofPattern("HH:mm")
-    return formatter.format(dateTime)
-}
-
-@RequiresApi(Build.VERSION_CODES.O)
-private fun formatDate(dateTime: LocalDateTime): String {
-    val formatter = DateTimeFormatter.ofPattern("MMM d, yyyy")
-    return formatter.format(dateTime)
+@Preview
+@Composable
+fun ChatPreview() {
+    ChatScreen(roomId = "preview")
 }
