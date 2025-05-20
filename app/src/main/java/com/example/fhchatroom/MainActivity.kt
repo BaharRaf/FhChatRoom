@@ -108,6 +108,9 @@ fun NavigationGraph(
                 roomId = roomId,
                 onShowMembers = {
                     navController.navigate("${Screen.MemberListScreen.route}/$roomId")
+                },
+                onBack = {
+                    navController.popBackStack()      // ← now wired to go back
                 }
             )
         }
@@ -115,7 +118,10 @@ fun NavigationGraph(
             val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
             MemberListScreen(
                 roomId = roomId,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onLeaveRoom = {
+                    navController.popBackStack(Screen.ChatRoomsScreen.route, inclusive = false)
+                }
             )
         }
     }
