@@ -7,9 +7,12 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -17,6 +20,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.fhchatroom.data.Room
 import com.example.fhchatroom.viewmodel.RoomViewModel
+import com.google.firebase.auth.FirebaseAuth
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 
 @Composable
 fun ChatRoomListScreen(
@@ -31,20 +37,37 @@ fun ChatRoomListScreen(
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         // Include the top app bar with Logout and theme toggle.
         ChatAppTopBar(onLogout = onLogout, isDarkTheme = isDarkTheme, onToggleTheme = onToggleTheme)
 
         Spacer(modifier = Modifier.height(8.dp))
 
         // List of available chat rooms with descriptions
+        val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email
         LazyColumn {
             items(rooms) { room ->
-                RoomItem(room = room, onJoinClicked = { onJoinClicked(room) })
+                // Determine if user is already a member and if user is the room creator
+                val isMember = currentUserEmail != null && room.members.contains(currentUserEmail)
+                val isOwner = currentUserEmail != null && room.members.firstOrNull() == currentUserEmail
+
+                RoomItem(
+                    room = room,
+                    isMember = isMember,
+                    isOwner = isOwner,
+                    onDeleteClicked = {
+                        // Only allow creator to delete the room
+                        roomViewModel.deleteRoom(room.id)
+                    },
+                    onJoinClicked = {
+                        // If not a member yet, join the room first
+                        if (!isMember) {
+                            roomViewModel.joinRoom(room.id)
+                        }
+                        // Navigate to the chat screen for this room
+                        onJoinClicked(room)
+                    }
+                )
             }
         }
 
@@ -67,47 +90,37 @@ fun ChatRoomListScreen(
                             onValueChange = { name = it },
                             label = { Text("Room Name") },
                             singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(8.dp)
+                            modifier = Modifier.fillMaxWidth().padding(8.dp)
                         )
                         OutlinedTextField(
                             value = description,
                             onValueChange = { description = it },
                             label = { Text("Description") },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(8.dp),
                             maxLines = 3
                         )
                     }
                 },
                 confirmButton = {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Button(
-                            onClick = {
-                                if (name.isNotBlank()) {
-                                    roomViewModel.createRoom(name, description)
-                                    name = ""
-                                    description = ""
-                                    showDialog = false
-                                }
-                            }
-                        ) {
-                            Text("Add")
-                        }
-                        Button(
-                            onClick = {
-                                showDialog = false
+                        Button(onClick = {
+                            if (name.isNotBlank()) {
+                                roomViewModel.createRoom(name, description)
                                 name = ""
                                 description = ""
+                                showDialog = false
                             }
-                        ) {
+                        }) {
+                            Text("Add")
+                        }
+                        Button(onClick = {
+                            showDialog = false
+                            name = ""
+                            description = ""
+                        }) {
                             Text("Cancel")
                         }
                     }
@@ -118,12 +131,17 @@ fun ChatRoomListScreen(
 }
 
 @Composable
-fun RoomItem(room: Room, onJoinClicked: (Room) -> Unit) {
+fun RoomItem(
+    room: Room,
+    isMember: Boolean = false,
+    isOwner: Boolean = false,
+    onDeleteClicked: (Room) -> Unit = {},
+    onJoinClicked: (Room) -> Unit
+) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+        modifier = Modifier.fillMaxWidth().padding(8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(text = room.name, fontSize = 16.sp, fontWeight = FontWeight.Normal)
@@ -131,25 +149,16 @@ fun RoomItem(room: Room, onJoinClicked: (Room) -> Unit) {
                 Text(text = room.description, fontSize = 14.sp, color = Color.Gray)
             }
         }
-        OutlinedButton(onClick = { onJoinClicked(room) }) {
-            Text("Join")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = { onJoinClicked(room) }) {
+                Text(if (isMember) "Enter" else "Join")
+            }
+            if (isOwner) {
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(onClick = { onDeleteClicked(room) }) {
+                    Icon(imageVector = Icons.Filled.Delete, contentDescription = "Delete Room")
+                }
+            }
         }
     }
-}
-
-@androidx.compose.ui.tooling.preview.Preview
-@Composable
-fun RoomListPreview() {
-    ChatRoomListScreen(
-        onJoinClicked = { },
-        onLogout = { },
-        isDarkTheme = false,
-        onToggleTheme = { }
-    )
-}
-
-@androidx.compose.ui.tooling.preview.Preview
-@Composable
-fun ItemPreview() {
-    RoomItem(room = Room(id = "id1", name = "Sample Room", description = "Sample description")) { }
 }
