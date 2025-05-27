@@ -1,5 +1,6 @@
 package com.example.fhchatroom.screen
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,7 +17,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -42,29 +44,43 @@ fun MemberListScreen(
     onBack: () -> Unit,
     onLeaveRoom: () -> Unit = {}
 ) {
+    val context = LocalContext.current  // for Toast
     var members by remember { mutableStateOf(listOf<User>()) }
-    var errorMessage by remember { mutableStateOf("") }
     val coroutineScope = rememberCoroutineScope()
 
-    // Load members when roomId changes
-    LaunchedEffect(roomId) {
-        try {
-            val firestore = Injection.instance()
-            val roomDoc = firestore.collection("rooms").document(roomId).get().await()
-            if (roomDoc.exists()) {
-                val room = roomDoc.toObject(Room::class.java)
-                val memberEmails = room?.members ?: emptyList()
-                val loadedMembers = mutableListOf<User>()
-                for (email in memberEmails) {
-                    val userDoc = firestore.collection("users").document(email).get().await()
-                    userDoc.toObject(User::class.java)?.let { loadedMembers.add(it) }
+
+    DisposableEffect(roomId) {
+        val firestore = Injection.instance()
+        val registration = firestore.collection("rooms").document(roomId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Toast.makeText(context, "Failed to load members: ${error.message}", Toast.LENGTH_LONG).show()
+                    return@addSnapshotListener
                 }
-                members = loadedMembers
-            } else {
-                errorMessage = "Room not found"
+                if (snapshot != null && snapshot.exists()) {
+                    val room = snapshot.toObject(Room::class.java)
+                    val memberEmails = room?.members ?: emptyList()
+                    coroutineScope.launch {
+                        // Fetch latest User details for each member email
+                        val loadedMembers = mutableListOf<User>()
+                        for (email in memberEmails) {
+                            try {
+                                val userDoc = firestore.collection("users").document(email).get().await()
+                                userDoc.toObject(User::class.java)?.let { loadedMembers.add(it) }
+                            } catch (e: Exception) {
+                                // Ignore individual fetch errors
+                            }
+                        }
+                        members = loadedMembers  // update member list state
+                    }
+                } else {
+                    // Room was deleted or not found
+                    Toast.makeText(context, "Room not found", Toast.LENGTH_SHORT).show()
+                    onBack()  // navigate back if the room no longer exists
+                }
             }
-        } catch (e: Exception) {
-            errorMessage = "Failed to load members: ${e.message}"
+        onDispose {
+            registration.remove()
         }
     }
 
@@ -75,13 +91,6 @@ fun MemberListScreen(
             fontSize = 20.sp,
             modifier = Modifier.padding(bottom = 8.dp)
         )
-        if (errorMessage.isNotEmpty()) {
-            Text(
-                text = errorMessage,
-                color = Color.Red,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-        }
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(members) { user ->
                 Row(
@@ -113,7 +122,8 @@ fun MemberListScreen(
                             // After leaving, navigate back to home (room list)
                             onLeaveRoom()
                         } catch (e: Exception) {
-                            errorMessage = "Failed to leave room: ${e.message}"
+                            // **Updated**: Show error in a Toast that auto-disappears
+                            Toast.makeText(context, "Failed to leave room: ${e.message}", Toast.LENGTH_LONG).show()
                         }
                     }
                 },
@@ -124,6 +134,6 @@ fun MemberListScreen(
             Button(onClick = onBack) {
                 Text("Close")
             }
-            }
         }
+    }
 }
