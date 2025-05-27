@@ -22,7 +22,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -39,7 +38,6 @@ fun SignUpScreen(
     var password by remember { mutableStateOf("") }
     var firstName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
-    var errorMessage by remember { mutableStateOf("") }
     val result by authViewModel.authResult.observeAsState()
     val context = LocalContext.current
 
@@ -84,25 +82,15 @@ fun SignUpScreen(
                 .padding(8.dp)
         )
 
-        // Display the error message if it is not empty.
-        if (errorMessage.isNotEmpty()) {
-            Text(
-                text = errorMessage,
-                color = Color.Red,
-                modifier = Modifier.padding(8.dp)
-            )
-        }
-
         Button(
             onClick = {
                 // Use ignoreCase true in case the user inputs uppercase letters.
                 if (!email.trim().endsWith("@stud.fh-campuswien.ac.at", ignoreCase = true)) {
-                    errorMessage = "Please use your institutional email (@stud.fh-campuswien.ac.at)"
+                    // **Updated**: Show validation errors with Toast (disappear after a few seconds)
+                    Toast.makeText(context, "Please use your institutional email (@stud.fh-campuswien.ac.at)", Toast.LENGTH_LONG).show()
                 } else if (password.length < 8 || password.all { it.isLetterOrDigit() }) {
-                    errorMessage =
-                        "Password must be at least 8 characters long and include at least one special character"
+                    Toast.makeText(context, "Password must be at least 8 characters long and include at least one special character", Toast.LENGTH_LONG).show()
                 } else {
-                    errorMessage = ""
                     authViewModel.signUp(email, password, firstName, lastName)
                     // Clear the input fields after attempting sign up.
                     email = ""
@@ -132,29 +120,17 @@ fun SignUpScreen(
                 Toast.makeText(context, "Account created successfully", Toast.LENGTH_SHORT).show()
                 onNavigateToLogin()
             }
-
             is Result.Error -> {
                 r.exception?.message?.let { msg ->
                     val toastText = when {
-                        msg.contains(
-                            "address is already in use",
-                            ignoreCase = true
-                        ) -> "Email is already registered."
-
-                        msg.contains(
-                            "badly formatted",
-                            ignoreCase = true
-                        ) -> "Invalid email address format."
-
+                        msg.contains("address is already in use", ignoreCase = true) -> "Email is already registered."
+                        msg.contains("badly formatted", ignoreCase = true) -> "Invalid email address format."
                         else -> "Sign up failed: $msg"
                     }
                     Toast.makeText(context, toastText, Toast.LENGTH_LONG).show()
-                } ?: Toast.makeText(context, "Sign up failed: Unknown error", Toast.LENGTH_LONG)
-                    .show()
+                } ?: Toast.makeText(context, "Sign up failed: Unknown error", Toast.LENGTH_LONG).show()
             }
-
             else -> {}
-                }
         }
-
+    }
 }
