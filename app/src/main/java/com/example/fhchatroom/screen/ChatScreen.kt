@@ -69,9 +69,10 @@ fun ChatScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Header with title + Members button
-        // (Only the header part of ChatScreen is shown, as other parts remain unchanged)
+        // extra gap from the top
+        Spacer(modifier = Modifier.height(16.dp))
 
+        // Header with title + Members button
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -81,14 +82,15 @@ fun ChatScreen(
                 Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
             }
             Text(text = "Chat", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            // **Updated**: Use a menu icon for member list (for better readability)
             IconButton(onClick = { onShowMembers() }) {
                 Icon(imageVector = Icons.Filled.MoreVert, contentDescription = "Members Menu")
             }
         }
 
 
-        // Messages list
+
+
+    // Messages list
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(messages) { message ->
                 val isMine = message.senderId == messageViewModel.currentUser.value?.email
