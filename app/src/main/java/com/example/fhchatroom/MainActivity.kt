@@ -21,6 +21,8 @@ import com.example.fhchatroom.screen.MemberListScreen
 import com.example.fhchatroom.screen.SignUpScreen
 import com.example.fhchatroom.ui.theme.ChatRoomAppTheme
 import com.example.fhchatroom.viewmodel.AuthViewModel
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,6 +51,26 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+    // **Added**: Override lifecycle to update online status on app foreground/background
+    override fun onStart() {
+        super.onStart()
+        // Mark user as online when app comes to foreground
+        val currentUser = FirebaseAuth.getInstance().currentUser
+        currentUser?.email?.let { email ->
+            FirebaseFirestore.getInstance().collection("users")
+                .document(email).update("isOnline", true)
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Mark user as offline when app goes to background
+        val currentUser = FirebaseAuth.getInstance().currentUser
+        currentUser?.email?.let { email ->
+            FirebaseFirestore.getInstance().collection("users")
+                .document(email).update("isOnline", false)
         }
     }
 }
