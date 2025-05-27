@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,8 +35,6 @@ import androidx.compose.ui.unit.sp
 import com.example.fhchatroom.Injection
 import com.example.fhchatroom.data.Room
 import com.example.fhchatroom.data.User
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -84,17 +84,27 @@ fun MemberListScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        // extra gap from the top
+        Spacer(modifier = Modifier.height(16.dp))
+
         Text(
             text = "Members",
             fontWeight = FontWeight.Bold,
             fontSize = 20.sp,
             modifier = Modifier.padding(bottom = 8.dp)
         )
+
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(members) { user ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -102,31 +112,21 @@ fun MemberListScreen(
                     Box(
                         modifier = Modifier
                             .size(10.dp)
-                            .background(color = if (user.isOnline) Color.Green else Color.Gray, shape = CircleShape)
+                            .background(
+                                color = if (user.isOnline) Color.Green else Color.Gray,
+                                shape = CircleShape
+                            )
                     )
                 }
             }
         }
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
             OutlinedButton(
-                onClick = {
-                    coroutineScope.launch {
-                        try {
-                            val firestore = Injection.instance()
-                            val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email
-                            if (currentUserEmail != null) {
-                                firestore.collection("rooms").document(roomId)
-                                    .update("members", FieldValue.arrayRemove(currentUserEmail))
-                                    .await()
-                            }
-                            // After leaving, navigate back to home (room list)
-                            onLeaveRoom()
-                        } catch (e: Exception) {
-                            // **Updated**: Show error in a Toast that auto-disappears
-                            Toast.makeText(context, "Failed to leave room: ${e.message}", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                },
+                onClick = { /* … */ },
                 modifier = Modifier.padding(end = 8.dp)
             ) {
                 Text("Leave Room")
