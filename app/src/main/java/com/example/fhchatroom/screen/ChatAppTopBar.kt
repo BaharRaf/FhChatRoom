@@ -49,13 +49,21 @@ fun ChatAppTopBar(
                     onClick = {
                         val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email
                         if (currentUserEmail != null) {
+                            // **Updated**: Mark user offline in Firestore then sign out on completion
                             FirebaseFirestore.getInstance().collection("users")
                                 .document(currentUserEmail)
                                 .update("isOnline", false)
+                                .addOnCompleteListener {
+                                    FirebaseAuth.getInstance().signOut()
+                                    menuExpanded.value = false
+                                    onLogout()
+                                }
+                        } else {
+                            // Fallback if no current user (should not happen in practice)
+                            FirebaseAuth.getInstance().signOut()
+                            menuExpanded.value = false
+                            onLogout()
                         }
-                        FirebaseAuth.getInstance().signOut()
-                        menuExpanded.value = false
-                        onLogout()
                     }
                 )
             }
