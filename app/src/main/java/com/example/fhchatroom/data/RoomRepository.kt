@@ -36,4 +36,15 @@ class RoomRepository(private val firestore: FirebaseFirestore) {
     } catch (e: Exception) {
         Result.Error(e)
     }
+
+    //  Remove current user from room members (leave room)
+    suspend fun leaveRoom(roomId: String): Result<Unit> = try {
+        val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email
+            ?: throw Exception("User not logged in")
+        firestore.collection("rooms").document(roomId)
+            .update("members", FieldValue.arrayRemove(currentUserEmail)).await()
+        Result.Success(Unit)
+    } catch (e: Exception) {
+        Result.Error(e)
+    }
 }

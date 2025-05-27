@@ -1,6 +1,5 @@
 package com.example.fhchatroom.data
 
-import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
@@ -9,7 +8,13 @@ class UserRepository(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore
 ) {
-    suspend fun signUp(email: String, password: String, firstName: String, lastName: String): Result<Boolean> = try {
+
+    suspend fun signUp(
+        email: String,
+        password: String,
+        firstName: String,
+        lastName: String
+    ): Result<Boolean> = try {
         auth.createUserWithEmailAndPassword(email, password).await()
         val user = User(firstName, lastName, email, isOnline = true)
         saveUserToFirestore(user)
@@ -18,26 +23,31 @@ class UserRepository(
         Result.Error(e)
     }
 
+
     suspend fun login(email: String, password: String): Result<Boolean> = try {
         auth.signInWithEmailAndPassword(email, password).await()
-        // Mark user as online on successful login
-        firestore.collection("users").document(email).update("isOnline", true).await()
         Result.Success(true)
     } catch (e: Exception) {
         Result.Error(e)
     }
 
     private suspend fun saveUserToFirestore(user: User) {
-        firestore.collection("users").document(user.email).set(user).await()
+        firestore.collection("users")
+            .document(user.email)
+            .set(user)
+            .await()
     }
+
 
     suspend fun getCurrentUser(): Result<User> = try {
         val uid = auth.currentUser?.email
         if (uid != null) {
-            val userDocument = firestore.collection("users").document(uid).get().await()
+            val userDocument = firestore.collection("users")
+                .document(uid)
+                .get()
+                .await()
             val user = userDocument.toObject(User::class.java)
             if (user != null) {
-                Log.d("user2", "$uid")
                 Result.Success(user)
             } else {
                 Result.Error(Exception("User data not found"))
