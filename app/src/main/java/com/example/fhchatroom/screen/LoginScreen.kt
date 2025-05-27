@@ -27,6 +27,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.fhchatroom.data.Result
 import com.example.fhchatroom.viewmodel.AuthViewModel
+import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,17 +87,26 @@ fun LoginScreen(
                 onSignInSuccess()
             }
             is Result.Error -> {
-                r.exception?.message?.let { msg ->
-                    val toastText = when {
-                        msg.contains("password is invalid", ignoreCase = true) -> "Incorrect password."
-                        msg.contains("no user record", ignoreCase = true) || msg.contains("no user corresponding", ignoreCase = true) -> "No account found with this email."
-                        msg.contains("badly formatted", ignoreCase = true) -> "Invalid email address format."
-                        else -> "Login failed: $msg"
+                val e = r.exception
+                val toastText = when {
+                    // check the exception class
+                    e is FirebaseAuthInvalidCredentialsException ->
+                        "Incorrect Email or password."
+                    e is FirebaseAuthInvalidUserException ->
+                        "No account found with this email."
+                    e is FirebaseAuthException -> {
+                        // you can also branch on the FirebaseAuthException.errorCode if you
+                        // want even finer control:
+                        when (e.errorCode) {
+                            "ERROR_INVALID_EMAIL" -> "That email address is malformed."
+                            else -> "Login failed: ${e.localizedMessage}"
+                        }
                     }
-                    Toast.makeText(context, toastText, Toast.LENGTH_LONG).show()
-                } ?: Toast.makeText(context, "Login failed: Unknown error", Toast.LENGTH_LONG).show()
-            }
-            else -> {}
+                    else -> "Login failed: ${e?.localizedMessage ?: "Unknown error"}"
                 }
+                Toast.makeText(context, toastText, Toast.LENGTH_LONG).show()
+            }
+            else -> Unit
         }
+    }
 }
