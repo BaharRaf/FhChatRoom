@@ -27,7 +27,6 @@ class RoomViewModel : ViewModel() {
                 if (error != null) {
                     return@addSnapshotListener
                 }
-
                 if (snapshot != null) {
                     val updatedRooms = snapshot.documents.mapNotNull { doc ->
                         val room = doc.toObject<Room>()
@@ -48,7 +47,8 @@ class RoomViewModel : ViewModel() {
         val newRoom = Room(
             name = name,
             description = description,
-            members = currentUserEmail?.let { listOf(it) } ?: emptyList()
+            members = currentUserEmail?.let { listOf(it) } ?: emptyList(),
+            ownerEmail = currentUserEmail ?: ""  // **Added**: store creator's email as owner
         )
         firestore.collection("rooms").add(newRoom)
     }
