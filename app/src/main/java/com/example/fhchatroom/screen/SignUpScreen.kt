@@ -96,8 +96,8 @@ fun SignUpScreen(
         Button(
             onClick = {
                 // Use ignoreCase true in case the user inputs uppercase letters.
-                if (!email.trim().endsWith("@fh-campuswien.ac.at", ignoreCase = true)) {
-                    errorMessage = "Please use your institutional email (@fh-campuswien.ac.at)"
+                if (!email.trim().endsWith("@stud.fh-campuswien.ac.at", ignoreCase = true)) {
+                    errorMessage = "Please use your institutional email (@stud.fh-campuswien.ac.at)"
                 } else if (password.length < 8 || password.all { it.isLetterOrDigit() }) {
                     errorMessage =
                         "Password must be at least 8 characters long and include at least one special character"
