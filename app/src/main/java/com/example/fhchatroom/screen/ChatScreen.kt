@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -69,6 +70,8 @@ fun ChatScreen(
             .padding(16.dp)
     ) {
         // Header with title + Members button
+        // (Only the header part of ChatScreen is shown, as other parts remain unchanged)
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -78,11 +81,12 @@ fun ChatScreen(
                 Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
             }
             Text(text = "Chat", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            // **Updated**: Use a menu icon for member list (for better readability)
             IconButton(onClick = { onShowMembers() }) {
-                Text("Members")
+                Icon(imageVector = Icons.Filled.MoreVert, contentDescription = "Members Menu")
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
+
 
         // Messages list
         LazyColumn(modifier = Modifier.weight(1f)) {
