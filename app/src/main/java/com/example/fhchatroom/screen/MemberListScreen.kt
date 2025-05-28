@@ -37,7 +37,10 @@ import com.example.fhchatroom.Injection
 import com.example.fhchatroom.data.Room
 import com.example.fhchatroom.data.User
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldPath
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.launch
@@ -53,15 +56,13 @@ fun MemberListScreen(
     var members by remember { mutableStateOf(listOf<User>()) }
     val coroutineScope = rememberCoroutineScope()
     val firestore = Injection.instance()
+    val database = FirebaseDatabase.getInstance()
+    val activeListeners = remember { mutableMapOf<String, ValueEventListener>() }
+    var roomListener: ListenerRegistration? by remember { mutableStateOf(null) }
     val TAG = "MemberListScreen"
 
-    // Listener for room document
-    var roomListener: ListenerRegistration? by remember { mutableStateOf(null) }
-    // Listener for users query
-    var usersListener: ListenerRegistration? by remember { mutableStateOf(null) }
-
     DisposableEffect(roomId) {
-        // Listen for changes in the room's member list
+        Log.d(TAG, "Start member listener for room $roomId")
         roomListener = firestore.collection("rooms").document(roomId)
             .addSnapshotListener { snap, err ->
                 if (err != null) {
@@ -72,26 +73,42 @@ fun MemberListScreen(
                 if (snap != null && snap.exists()) {
                     val room = snap.toObject(Room::class.java)
                     val emails = room?.members ?: emptyList()
-                    // Remove old users listener
-                    usersListener?.remove()
-                    usersListener = null
-
+                    // clear old listeners
+                    activeListeners.forEach { (email, listener) ->
+                        val enc = email.replace(".", ",")
+                        database.getReference("status/$enc").removeEventListener(listener)
+                    }
+                    activeListeners.clear()
                     if (emails.isNotEmpty()) {
-                        // CORRECTED: Query by document ID instead of "email" field
-                        usersListener = firestore.collection("users")
-                            .whereIn(FieldPath.documentId(), emails)
-                            .addSnapshotListener { userSnap, userErr ->
-                                if (userErr != null) {
-                                    Log.e(TAG, "User listen error", userErr)
-                                    Toast.makeText(context, "Failed to load member statuses", Toast.LENGTH_SHORT).show()
-                                    return@addSnapshotListener
-                                }
-                                if (userSnap != null) {
-                                    // Map Firestore documents to User objects
-                                    members = userSnap.documents.mapNotNull {
-                                        it.toObject(User::class.java)
+                        // fetch user profiles
+                        firestore.collection("users").whereIn("email", emails).get()
+                            .addOnSuccessListener { docs ->
+                                val users = docs.documents.mapNotNull { it.toObject(User::class.java) }
+                                // initialize all as offline
+                                members = users.map { it.copy(isOnline = false) }
+                                // attach RTDB listeners
+                                users.forEach { user ->
+                                    val enc = user.email.replace(".", ",")
+                                    val ref = database.getReference("status/$enc")
+                                    val listener = object: ValueEventListener {
+                                        override fun onDataChange(ds: DataSnapshot) {
+                                            val online = ds.getValue(Boolean::class.java) ?: false
+                                            members = members.map {
+                                                if (it.email == user.email) it.copy(isOnline = online)
+                                                else it
+                                            }
+                                        }
+                                        override fun onCancelled(e: DatabaseError) {
+                                            Log.e(TAG, "Status listener cancelled for ${user.email}", e.toException())
+                                        }
                                     }
+                                    ref.addValueEventListener(listener)
+                                    activeListeners[user.email] = listener
                                 }
+                            }
+                            .addOnFailureListener { e ->
+                                Log.e(TAG, "Fetch users failed", e)
+                                Toast.makeText(context, "Failed to load members", Toast.LENGTH_SHORT).show()
                             }
                     } else {
                         members = emptyList()
@@ -101,70 +118,55 @@ fun MemberListScreen(
                     onBack()
                 }
             }
-
         onDispose {
             roomListener?.remove()
-            usersListener?.remove()
+            activeListeners.forEach { (email, listener) ->
+                val enc = email.replace(".", ",")
+                database.getReference("status/$enc").removeEventListener(listener)
+            }
+            activeListeners.clear()
         }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Spacer(modifier = Modifier.height(16.dp))
-        Text(text = "Members", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Text("Members", fontWeight = FontWeight.Bold, fontSize = 20.sp)
         LazyColumn(modifier = Modifier.weight(1f).padding(top = 8.dp)) {
             items(members, key = { it.email }) { user ->
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
+                    Modifier.fillMaxWidth().padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(text = "${user.firstName} ${user.lastName}")
                     Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .background(
-                                color = if (user.isOnline) Color.Green else Color.Gray,
-                                shape = CircleShape
-                            )
+                        Modifier.size(12.dp).background(
+                            color = if (user.isOnline) Color.Green else Color.Gray,
+                            shape = CircleShape
+                        )
                     )
                 }
             }
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
-            horizontalArrangement = Arrangement.End
-        ) {
-            OutlinedButton(
-                onClick = {
-                    coroutineScope.launch {
-                        val email = FirebaseAuth.getInstance().currentUser?.email
-                        if (email != null) {
-                            try {
-                                firestore.collection("rooms")
-                                    .document(roomId)
-                                    .update("members", FieldValue.arrayRemove(email))
-                                    .await()
-                                Toast.makeText(context, "Left room", Toast.LENGTH_SHORT).show()
-                                onLeaveRoom()
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Leave failed", e)
-                                Toast.makeText(context, "Failed to leave", Toast.LENGTH_LONG).show()
-                            }
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
+            OutlinedButton(onClick = {
+                coroutineScope.launch {
+                    val email = FirebaseAuth.getInstance().currentUser?.email
+                    if (email != null) {
+                        try {
+                            firestore.collection("rooms").document(roomId)
+                                .update("members", FieldValue.arrayRemove(email)).await()
+                            Toast.makeText(context, "Left room", Toast.LENGTH_SHORT).show()
+                            onLeaveRoom()
+                        } catch(e: Exception) {
+                            Log.e(TAG, "Leave failed", e)
+                            Toast.makeText(context, "Failed to leave", Toast.LENGTH_LONG).show()
                         }
                     }
-                },
-                Modifier.padding(end = 8.dp)
-            ) {
-                Text("Leave Room")
-            }
-            Button(onClick = onBack) {
-                Text("Close")
-            }
+                }
+            }, Modifier.padding(end = 8.dp)) { Text("Leave Room") }
+            Button(onClick = onBack) { Text("Close") }
         }
     }
 }

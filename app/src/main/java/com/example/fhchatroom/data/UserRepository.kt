@@ -10,15 +10,13 @@ class UserRepository(
 ) {
 
     suspend fun signUp(
-
         email: String,
         password: String,
         firstName: String,
         lastName: String
     ): Result<Boolean> = try {
         auth.createUserWithEmailAndPassword(email, password).await()
-        // Set isOnline to false initially; OnlineStatusUpdater will set it to true
-        val user = User(firstName, lastName, email, isOnline = false)
+        val user = User(firstName, lastName, email, isOnline = true)
         saveUserToFirestore(user)
         Result.Success(true)
     } catch (e: Exception) {
