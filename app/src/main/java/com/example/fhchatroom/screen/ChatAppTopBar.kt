@@ -13,6 +13,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.firestore.FirebaseFirestore
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,10 +44,29 @@ fun ChatAppTopBar(
                 DropdownMenuItem(
                     text = { Text("Logout") },
                     onClick = {
-                        // OnlineStatusUpdater will handle marking user offline upon auth state change.
-                        FirebaseAuth.getInstance().signOut()
-                        menuExpanded.value = false // Close menu
-                        onLogout() // Navigate to login screen
+                        val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email
+                        if (currentUserEmail != null) {
+                            // **Updated**: Mark user offline in Firestore then sign out on completion
+                            FirebaseFirestore.getInstance().collection("users")
+                                .document(currentUserEmail)
+                                .update("isOnline", false)
+                                .addOnCompleteListener {
+                                    // **Added**: Also mark user offline in Realtime Database
+                                    val encodedEmail = currentUserEmail.replace(".", ",")
+                                    FirebaseDatabase.getInstance().getReference("status/$encodedEmail")
+                                        .setValue(false)
+                                        .addOnCompleteListener {
+                                            FirebaseAuth.getInstance().signOut()
+                                            menuExpanded.value = false
+                                            onLogout()
+                                        }
+                                }
+                        } else {
+                            // Fallback if no current user (should not happen in practice)
+                            FirebaseAuth.getInstance().signOut()
+                            menuExpanded.value = false
+                            onLogout()
+                        }
                     }
                 )
             }
