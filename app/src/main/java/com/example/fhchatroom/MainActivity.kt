@@ -24,29 +24,15 @@ import com.example.fhchatroom.screen.LoginScreen
 import com.example.fhchatroom.screen.MemberListScreen
 import com.example.fhchatroom.screen.SignUpScreen
 import com.example.fhchatroom.ui.theme.ChatRoomAppTheme
-import com.example.fhchatroom.util.OnlineStatusUpdater // Import the new class
+import com.example.fhchatroom.util.OnlineStatusUpdater
 import com.example.fhchatroom.viewmodel.AuthViewModel
-// Remove these Firebase imports if they are no longer directly used here
-// import com.google.firebase.auth.FirebaseAuth
-// import com.google.firebase.database.DataSnapshot
-// import com.google.firebase.database.DatabaseError
-// import com.google.firebase.database.DatabaseReference
-// import com.google.firebase.database.FirebaseDatabase
-// import com.google.firebase.database.ValueEventListener
-// import com.google.firebase.firestore.FirebaseFirestore
 
 class MainActivity : ComponentActivity() {
-    // Remove old presence variables:
-    // private var connectionListener: ValueEventListener? = null
-    // private var connectedRef: DatabaseReference? = null
-    // private var lastEmail: String? = null
-    // private val authListener = FirebaseAuth.AuthStateListener { ... } // Remove old listener
-
     private lateinit var onlineStatusUpdater: OnlineStatusUpdater
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        onlineStatusUpdater = OnlineStatusUpdater() // Initialize the updater
+        onlineStatusUpdater = OnlineStatusUpdater()
 
         setContent {
             val navController = rememberNavController()
@@ -75,30 +61,22 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        // The OnlineStatusUpdater's AuthStateListener and .info/connected listener
-        // will primarily handle setting the user online.
-        // This call ensures that if the app is resuming and listeners are ready,
-        // an explicit online status is attempted.
-        onlineStatusUpdater.markUserAsOnlineIfNeeded()
+        // Presence is handled by OnlineStatusUpdater's AuthStateListener
+        // but if needed, you can explicitly ensure user is marked online here
     }
 
     override fun onStop() {
         super.onStop()
-        // Called when the activity is no longer visible.
-        // User is likely switching apps or app is being backgrounded.
-        onlineStatusUpdater.markUserAsOffline()
+        // App is backgrounded or no longer visible
+        onlineStatusUpdater.goOffline()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        // Called before the activity is destroyed.
-        onlineStatusUpdater.performCleanupOnAppDestroy()
+        // Clean up listeners
+        onlineStatusUpdater.cleanup()
     }
-
-    // Remove the old markUserOffline helper function if it existed here.
-    // private fun markUserOffline(email: String) { ... }
 }
-
 
 @Composable
 fun NavigationGraph(
@@ -109,16 +87,14 @@ fun NavigationGraph(
 ) {
     NavHost(
         navController = navController,
-        // Consider making LoginScreen the start if user can be logged out
-        // Or implement logic to check auth state and navigate accordingly
-        startDestination = Screen.SignupScreen.route // Or Screen.LoginScreen.route
+        startDestination = Screen.SignupScreen.route
     ) {
         composable(Screen.SignupScreen.route) {
             SignUpScreen(
                 authViewModel = authViewModel,
                 onNavigateToLogin = {
                     navController.navigate(Screen.LoginScreen.route) {
-                        popUpTo(Screen.SignupScreen.route) { inclusive = true } // Clear signup from backstack
+                        popUpTo(Screen.SignupScreen.route) { inclusive = true }
                     }
                 }
             )
@@ -128,11 +104,10 @@ fun NavigationGraph(
                 authViewModel = authViewModel,
                 onNavigateToSignUp = {
                     navController.navigate(Screen.SignupScreen.route) {
-                        popUpTo(Screen.LoginScreen.route) { inclusive = true } // Clear login from backstack
+                        popUpTo(Screen.LoginScreen.route) { inclusive = true }
                     }
                 }
             ) {
-                // On successful login, navigate to chat rooms
                 navController.navigate(Screen.ChatRoomsScreen.route) {
                     popUpTo(Screen.LoginScreen.route) { inclusive = true }
                 }
@@ -144,10 +119,8 @@ fun NavigationGraph(
                     navController.navigate("${Screen.ChatScreen.route}/${room.id}")
                 },
                 onLogout = {
-                    // AuthViewModel should handle sign out, which triggers OnlineStatusUpdater
-                    // Navigate back to login screen
                     navController.navigate(Screen.LoginScreen.route) {
-                        popUpTo(Screen.ChatRoomsScreen.route) { inclusive = true } // Clear all chat related screens
+                        popUpTo(Screen.ChatRoomsScreen.route) { inclusive = true }
                     }
                 },
                 isDarkTheme = isDarkTheme,
@@ -171,7 +144,7 @@ fun NavigationGraph(
             MemberListScreen(
                 roomId = roomId,
                 onBack = { navController.popBackStack() },
-                onLeaveRoom = { // After leaving room
+                onLeaveRoom = {
                     navController.popBackStack(Screen.ChatRoomsScreen.route, inclusive = false)
                 }
             )

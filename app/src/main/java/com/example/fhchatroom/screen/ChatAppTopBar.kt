@@ -1,5 +1,6 @@
 package com.example.fhchatroom.screen
 
+import android.util.Log
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -13,7 +14,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -34,35 +34,33 @@ fun ChatAppTopBar(
                 expanded = menuExpanded.value,
                 onDismissRequest = { menuExpanded.value = false }
             ) {
-                DropdownMenuItem(
-                    text = { Text(if (isDarkTheme) "Light Mode" else "Dark Mode") },
-                    onClick = {
-                        onToggleTheme()
-                        menuExpanded.value = false
-                    }
-                )
+                // … your theme toggle item …
+
                 DropdownMenuItem(
                     text = { Text("Logout") },
                     onClick = {
-                        val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email
-                        if (currentUserEmail != null) {
-                            // **Updated**: Mark user offline in Firestore then sign out on completion
-                            FirebaseFirestore.getInstance().collection("users")
-                                .document(currentUserEmail)
+                        val email = FirebaseAuth.getInstance().currentUser?.email
+                        if (email != null) {
+                            // 1) mark offline in Firestore
+                            FirebaseFirestore.getInstance()
+                                .collection("users")
+                                .document(email)
                                 .update("isOnline", false)
-                                .addOnCompleteListener {
-                                    // **Added**: Also mark user offline in Realtime Database
-                                    val encodedEmail = currentUserEmail.replace(".", ",")
-                                    FirebaseDatabase.getInstance().getReference("status/$encodedEmail")
-                                        .setValue(false)
-                                        .addOnCompleteListener {
-                                            FirebaseAuth.getInstance().signOut()
-                                            menuExpanded.value = false
-                                            onLogout()
-                                        }
+                                .addOnSuccessListener {
+                                    // 2) sign out only after Firestore update
+                                    FirebaseAuth.getInstance().signOut()
+                                    menuExpanded.value = false
+                                    onLogout()
+                                }
+                                .addOnFailureListener { e ->
+                                    // even on failure, sign out to avoid stuck state
+                                    Log.e("ChatAppTopBar", "Could not set isOnline=false", e)
+                                    FirebaseAuth.getInstance().signOut()
+                                    menuExpanded.value = false
+                                    onLogout()
                                 }
                         } else {
-                            // Fallback if no current user (should not happen in practice)
+                            // fallback
                             FirebaseAuth.getInstance().signOut()
                             menuExpanded.value = false
                             onLogout()
