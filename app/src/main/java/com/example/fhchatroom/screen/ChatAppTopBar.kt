@@ -13,6 +13,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import com.example.fhchatroom.util.OnlineStatusUpdater
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
@@ -34,38 +35,53 @@ fun ChatAppTopBar(
                 expanded = menuExpanded.value,
                 onDismissRequest = { menuExpanded.value = false }
             ) {
-                // … your theme toggle item …
+                DropdownMenuItem(
+                    text = { Text(if (isDarkTheme) "Light Theme" else "Dark Theme") },
+                    onClick = {
+                        onToggleTheme()
+                        menuExpanded.value = false
+                    }
+                )
+
 
                 DropdownMenuItem(
                     text = { Text("Logout") },
                     onClick = {
                         val email = FirebaseAuth.getInstance().currentUser?.email
+                        val onlineStatusUpdater = OnlineStatusUpdater()
                         if (email != null) {
-                            // 1) mark offline in Firestore
+                            // 1) mark offline in Firestore and Realtime Database
                             FirebaseFirestore.getInstance()
                                 .collection("users")
                                 .document(email)
                                 .update("isOnline", false)
                                 .addOnSuccessListener {
-                                    // 2) sign out only after Firestore update
+                                    // Explicitly mark offline in RTDB
+                                    onlineStatusUpdater.goOffline()
+
+                                    // Sign out after all is done
                                     FirebaseAuth.getInstance().signOut()
                                     menuExpanded.value = false
                                     onLogout()
                                 }
                                 .addOnFailureListener { e ->
-                                    // even on failure, sign out to avoid stuck state
+                                    // Still go offline and sign out even if Firestore fails
+                                    onlineStatusUpdater.goOffline()
                                     Log.e("ChatAppTopBar", "Could not set isOnline=false", e)
                                     FirebaseAuth.getInstance().signOut()
                                     menuExpanded.value = false
                                     onLogout()
                                 }
+
                         } else {
                             // fallback
+                            onlineStatusUpdater.goOffline()
                             FirebaseAuth.getInstance().signOut()
                             menuExpanded.value = false
                             onLogout()
                         }
                     }
+
                 )
             }
         }

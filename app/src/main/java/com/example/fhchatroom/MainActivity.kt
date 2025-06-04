@@ -1,31 +1,27 @@
 package com.example.fhchatroom
 
-import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.fhchatroom.screen.ChatRoomListScreen
-import com.example.fhchatroom.screen.ChatScreen
-import com.example.fhchatroom.screen.LoginScreen
-import com.example.fhchatroom.screen.MemberListScreen
-import com.example.fhchatroom.screen.SignUpScreen
+import com.example.fhchatroom.screen.*
 import com.example.fhchatroom.ui.theme.ChatRoomAppTheme
 import com.example.fhchatroom.util.OnlineStatusUpdater
 import com.example.fhchatroom.viewmodel.AuthViewModel
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private lateinit var onlineStatusUpdater: OnlineStatusUpdater
@@ -35,46 +31,58 @@ class MainActivity : ComponentActivity() {
         onlineStatusUpdater = OnlineStatusUpdater()
 
         setContent {
-            val navController = rememberNavController()
-            val authViewModel: AuthViewModel = viewModel()
-            val prefs = getSharedPreferences("settings", Context.MODE_PRIVATE)
-            var isDarkTheme by remember { mutableStateOf(prefs.getBoolean("dark_theme", false)) }
+            val context = applicationContext
+            val coroutineScope = rememberCoroutineScope()
+            var isDarkTheme by remember { mutableStateOf(false) }
 
             ChatRoomAppTheme(darkTheme = isDarkTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    val navController = rememberNavController()
+                    val authViewModel: AuthViewModel = viewModel()
+
+                    // Start at ChatRoomList if logged in
+                    val user = FirebaseAuth.getInstance().currentUser
+                    val startDestination = if (user != null)
+                        Screen.ChatRoomsScreen.route
+                    else
+                        Screen.SignupScreen.route
+
                     NavigationGraph(
                         navController = navController,
                         authViewModel = authViewModel,
                         isDarkTheme = isDarkTheme,
                         onToggleTheme = {
                             isDarkTheme = !isDarkTheme
-                            prefs.edit().putBoolean("dark_theme", isDarkTheme).apply()
-                        }
+                            coroutineScope.launch {}
+                        },
+                        startDestination = startDestination
                     )
                 }
             }
+
+            // Observe app lifecycle to update online status
+            DisposableEffect(Unit) {
+                val observer = LifecycleEventObserver { _, event ->
+                    val email = FirebaseAuth.getInstance().currentUser?.email
+                    if (email != null) {
+                        if (event == Lifecycle.Event.ON_START) {
+                            onlineStatusUpdater = OnlineStatusUpdater()
+                        }
+                        if (event == Lifecycle.Event.ON_STOP) {
+                            onlineStatusUpdater.goOffline()
+                        }
+                    }
+                }
+                ProcessLifecycleOwner.get().lifecycle.addObserver(observer)
+                onDispose {
+                    ProcessLifecycleOwner.get().lifecycle.removeObserver(observer)
+                    onlineStatusUpdater.cleanup()
+                }
+            }
         }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        // Presence is handled by OnlineStatusUpdater's AuthStateListener
-        // but if needed, you can explicitly ensure user is marked online here
-    }
-
-    override fun onStop() {
-        super.onStop()
-        // App is backgrounded or no longer visible
-        onlineStatusUpdater.goOffline()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        // Clean up listeners
-        onlineStatusUpdater.cleanup()
     }
 }
 
@@ -83,11 +91,12 @@ fun NavigationGraph(
     navController: NavHostController,
     authViewModel: AuthViewModel,
     isDarkTheme: Boolean,
-    onToggleTheme: () -> Unit
+    onToggleTheme: () -> Unit,
+    startDestination: String
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.SignupScreen.route
+        startDestination = startDestination
     ) {
         composable(Screen.SignupScreen.route) {
             SignUpScreen(
