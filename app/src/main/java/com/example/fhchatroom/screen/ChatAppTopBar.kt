@@ -1,5 +1,6 @@
 package com.example.fhchatroom.screen
 
+import android.util.Log
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -12,8 +13,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import com.example.fhchatroom.util.OnlineStatusUpdater
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,39 +36,52 @@ fun ChatAppTopBar(
                 onDismissRequest = { menuExpanded.value = false }
             ) {
                 DropdownMenuItem(
-                    text = { Text(if (isDarkTheme) "Light Mode" else "Dark Mode") },
+                    text = { Text(if (isDarkTheme) "Light Theme" else "Dark Theme") },
                     onClick = {
                         onToggleTheme()
                         menuExpanded.value = false
                     }
                 )
+
+
                 DropdownMenuItem(
                     text = { Text("Logout") },
                     onClick = {
-                        val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email
-                        if (currentUserEmail != null) {
-                            // **Updated**: Mark user offline in Firestore then sign out on completion
-                            FirebaseFirestore.getInstance().collection("users")
-                                .document(currentUserEmail)
+                        val email = FirebaseAuth.getInstance().currentUser?.email
+                        val onlineStatusUpdater = OnlineStatusUpdater()
+                        if (email != null) {
+                            // 1) mark offline in Firestore and Realtime Database
+                            FirebaseFirestore.getInstance()
+                                .collection("users")
+                                .document(email)
                                 .update("isOnline", false)
-                                .addOnCompleteListener {
-                                    // **Added**: Also mark user offline in Realtime Database
-                                    val encodedEmail = currentUserEmail.replace(".", ",")
-                                    FirebaseDatabase.getInstance().getReference("status/$encodedEmail")
-                                        .setValue(false)
-                                        .addOnCompleteListener {
-                                            FirebaseAuth.getInstance().signOut()
-                                            menuExpanded.value = false
-                                            onLogout()
-                                        }
+                                .addOnSuccessListener {
+                                    // Explicitly mark offline in RTDB
+                                    onlineStatusUpdater.goOffline()
+
+                                    // Sign out after all is done
+                                    FirebaseAuth.getInstance().signOut()
+                                    menuExpanded.value = false
+                                    onLogout()
                                 }
+                                .addOnFailureListener { e ->
+                                    // Still go offline and sign out even if Firestore fails
+                                    onlineStatusUpdater.goOffline()
+                                    Log.e("ChatAppTopBar", "Could not set isOnline=false", e)
+                                    FirebaseAuth.getInstance().signOut()
+                                    menuExpanded.value = false
+                                    onLogout()
+                                }
+
                         } else {
-                            // Fallback if no current user (should not happen in practice)
+                            // fallback
+                            onlineStatusUpdater.goOffline()
                             FirebaseAuth.getInstance().signOut()
                             menuExpanded.value = false
                             onLogout()
                         }
                     }
+
                 )
             }
         }
