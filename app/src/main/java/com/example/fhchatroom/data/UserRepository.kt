@@ -27,12 +27,6 @@ class UserRepository(
     suspend fun login(email: String, password: String): Result<Boolean> = try {
         auth.signInWithEmailAndPassword(email, password).await()
 
-        // mark online in Firestore
-        firestore
-            .collection("users")
-            .document(email)
-            .update("isOnline", true)
-            .await()
 
         Result.Success(true)
     } catch(e: Exception) {

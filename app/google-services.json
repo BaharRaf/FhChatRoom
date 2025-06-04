@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "1083643615271",
+    "firebase_url": "https://fhchatroom-d00a3-default-rtdb.europe-west1.firebasedatabase.app",
     "project_id": "fhchatroom-d00a3",
     "storage_bucket": "fhchatroom-d00a3.firebasestorage.app"
   },
