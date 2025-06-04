@@ -50,28 +50,13 @@ fun ChatAppTopBar(
                         val email = FirebaseAuth.getInstance().currentUser?.email
                         val onlineStatusUpdater = OnlineStatusUpdater()
                         if (email != null) {
-                            // 1) mark offline in Firestore and Realtime Database
-                            FirebaseFirestore.getInstance()
-                                .collection("users")
-                                .document(email)
-                                .update("isOnline", false)
-                                .addOnSuccessListener {
-                                    // Explicitly mark offline in RTDB
-                                    onlineStatusUpdater.goOffline()
 
-                                    // Sign out after all is done
-                                    FirebaseAuth.getInstance().signOut()
-                                    menuExpanded.value = false
-                                    onLogout()
-                                }
-                                .addOnFailureListener { e ->
-                                    // Still go offline and sign out even if Firestore fails
-                                    onlineStatusUpdater.goOffline()
-                                    Log.e("ChatAppTopBar", "Could not set isOnline=false", e)
-                                    FirebaseAuth.getInstance().signOut()
-                                    menuExpanded.value = false
-                                    onLogout()
-                                }
+                            // Just mark offline in RTDB and sign out
+                            onlineStatusUpdater.goOffline()
+                            FirebaseAuth.getInstance().signOut()
+                            menuExpanded.value = false
+                            onLogout()
+
 
                         } else {
                             // fallback

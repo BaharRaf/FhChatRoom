@@ -26,10 +26,13 @@ class UserRepository(
 
     suspend fun login(email: String, password: String): Result<Boolean> = try {
         auth.signInWithEmailAndPassword(email, password).await()
+
+
         Result.Success(true)
-    } catch (e: Exception) {
+    } catch(e: Exception) {
         Result.Error(e)
     }
+
 
     private suspend fun saveUserToFirestore(user: User) {
         firestore.collection("users")

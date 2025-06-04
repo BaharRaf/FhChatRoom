@@ -8,6 +8,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -21,7 +24,13 @@ import com.example.fhchatroom.ui.theme.ChatRoomAppTheme
 import com.example.fhchatroom.util.OnlineStatusUpdater
 import com.example.fhchatroom.viewmodel.AuthViewModel
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import android.content.Context
+
+val Context.dataStore by preferencesDataStore(name = "settings")
+val DARK_MODE_KEY = booleanPreferencesKey("dark_mode")
 
 class MainActivity : ComponentActivity() {
     private lateinit var onlineStatusUpdater: OnlineStatusUpdater
@@ -31,9 +40,15 @@ class MainActivity : ComponentActivity() {
         onlineStatusUpdater = OnlineStatusUpdater()
 
         setContent {
-            val context = applicationContext
             val coroutineScope = rememberCoroutineScope()
+            val context = applicationContext
             var isDarkTheme by remember { mutableStateOf(false) }
+
+            // Load dark mode setting from DataStore
+            LaunchedEffect(Unit) {
+                val preferences = context.dataStore.data.first()
+                isDarkTheme = preferences[DARK_MODE_KEY] ?: false
+            }
 
             ChatRoomAppTheme(darkTheme = isDarkTheme) {
                 Surface(
@@ -43,7 +58,6 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     val authViewModel: AuthViewModel = viewModel()
 
-                    // Start at ChatRoomList if logged in
                     val user = FirebaseAuth.getInstance().currentUser
                     val startDestination = if (user != null)
                         Screen.ChatRoomsScreen.route
@@ -56,23 +70,31 @@ class MainActivity : ComponentActivity() {
                         isDarkTheme = isDarkTheme,
                         onToggleTheme = {
                             isDarkTheme = !isDarkTheme
-                            coroutineScope.launch {}
+                            coroutineScope.launch {
+                                context.dataStore.edit { it[DARK_MODE_KEY] = isDarkTheme }
+                            }
                         },
                         startDestination = startDestination
                     )
                 }
             }
 
-            // Observe app lifecycle to update online status
             DisposableEffect(Unit) {
                 val observer = LifecycleEventObserver { _, event ->
                     val email = FirebaseAuth.getInstance().currentUser?.email
                     if (email != null) {
-                        if (event == Lifecycle.Event.ON_START) {
-                            onlineStatusUpdater = OnlineStatusUpdater()
-                        }
-                        if (event == Lifecycle.Event.ON_STOP) {
-                            onlineStatusUpdater.goOffline()
+                        when (event) {
+                            Lifecycle.Event.ON_START -> {
+                                coroutineScope.launch {
+                                    onlineStatusUpdater = OnlineStatusUpdater()
+                                }
+                            }
+                            Lifecycle.Event.ON_STOP -> {
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    onlineStatusUpdater.goOffline()
+                                }
+                            }
+                            else -> {}
                         }
                     }
                 }
