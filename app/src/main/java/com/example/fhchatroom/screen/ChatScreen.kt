@@ -135,13 +135,16 @@ fun ChatScreen(
         when (val r = sendResult) {
             is Result.Success -> {
                 Toast.makeText(context, "Message sent", Toast.LENGTH_SHORT).show()
+                messageViewModel.clearSendResult()
             }
             is Result.Error -> {
                 Toast.makeText(context, "Failed to send: ${r.exception.message}", Toast.LENGTH_LONG).show()
+                messageViewModel.clearSendResult()
             }
             else -> {}
         }
     }
+
 }
 
 @RequiresApi(Build.VERSION_CODES.O)
