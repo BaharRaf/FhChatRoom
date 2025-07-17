@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,8 +21,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -57,11 +60,14 @@ fun ChatScreen(
 ) {
     // Observe messages & set room
     val messages by messageViewModel.messages.observeAsState(emptyList())
-    messageViewModel.setRoomId(roomId)
+    LaunchedEffect(roomId) {
+        messageViewModel.setRoomId(roomId)
+    }
 
     // Input state
     val textState = remember { mutableStateOf("") }
     val sendResult by messageViewModel.sendResult.observeAsState()
+    val deleteResult by messageViewModel.deleteResult.observeAsState()
     val context = LocalContext.current
 
     Column(
@@ -92,9 +98,15 @@ fun ChatScreen(
 
     // Messages list
         LazyColumn(modifier = Modifier.weight(1f)) {
-            items(messages) { message ->
+            items(messages, key = { it.id }) { message ->
                 val isMine = message.senderId == messageViewModel.currentUser.value?.email
-                ChatMessageItem(message = message.copy(isSentByCurrentUser = isMine))
+                ChatMessageItem(
+                    message = message.copy(isSentByCurrentUser = isMine),
+                    onDeleteForMe = { messageViewModel.deleteMessageForMe(message) },
+                    onDeleteForEveryone = if (isMine) {
+                        { messageViewModel.deleteMessageForEveryone(message) }
+                    } else null
+                )
             }
         }
 
@@ -121,7 +133,6 @@ fun ChatScreen(
                     if (content.isNotEmpty()) {
                         messageViewModel.sendMessage(content)
                         textState.value = ""
-                        messageViewModel.loadMessages()
                     }
                 }
             ) {
@@ -135,9 +146,26 @@ fun ChatScreen(
         when (val r = sendResult) {
             is Result.Success -> {
                 Toast.makeText(context, "Message sent", Toast.LENGTH_SHORT).show()
+                messageViewModel.clearSendResult()
             }
             is Result.Error -> {
                 Toast.makeText(context, "Failed to send: ${r.exception.message}", Toast.LENGTH_LONG).show()
+                messageViewModel.clearSendResult()
+            }
+            else -> {}
+        }
+    }
+
+    // Toast on delete success/failure
+    LaunchedEffect(deleteResult) {
+        when (val r = deleteResult) {
+            is Result.Success -> {
+                Toast.makeText(context, "Message deleted", Toast.LENGTH_SHORT).show()
+                messageViewModel.clearDeleteResult()
+            }
+            is Result.Error -> {
+                Toast.makeText(context, "Failed to delete: ${r.exception.message}", Toast.LENGTH_LONG).show()
+                messageViewModel.clearDeleteResult()
             }
             else -> {}
         }
@@ -146,11 +174,17 @@ fun ChatScreen(
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun ChatMessageItem(message: Message) {
+fun ChatMessageItem(
+    message: Message,
+    onDeleteForMe: () -> Unit,
+    onDeleteForEveryone: (() -> Unit)?
+) {
+    val showDialog = remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp),
+            .padding(8.dp)
+            .combinedClickable(onLongClick = { showDialog.value = true }, onClick = {}),
         horizontalAlignment = if (message.isSentByCurrentUser) Alignment.End else Alignment.Start
     ) {
         Box(
@@ -175,6 +209,29 @@ fun ChatMessageItem(message: Message) {
         Text(
             text = formatTimestamp(message.timestamp),
             style = TextStyle(fontSize = 12.sp, color = Color.Gray)
+        )
+    }
+    if (showDialog.value) {
+        AlertDialog(
+            onDismissRequest = { showDialog.value = false },
+            title = { Text("Delete message") },
+            text = {
+                Column {
+                    TextButton(onClick = {
+                        onDeleteForMe(); showDialog.value = false
+                    }) { Text("Delete for me") }
+                    onDeleteForEveryone?.let {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        TextButton(onClick = {
+                            it(); showDialog.value = false
+                        }) { Text("Delete for everyone") }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showDialog.value = false }) { Text("Close") }
+            }
         )
     }
 }

@@ -5,6 +5,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
 import com.google.firebase.auth.FirebaseAuth
 import com.example.fhchatroom.Injection
 import com.example.fhchatroom.data.Message
@@ -35,8 +36,21 @@ class MessageViewModel : ViewModel() {
     private val _currentUser = MutableLiveData<User>()
     val currentUser: LiveData<User> get() = _currentUser
 
-    private val _sendResult = MutableLiveData<com.example.fhchatroom.data.Result<Unit>>()
-    val sendResult: LiveData<com.example.fhchatroom.data.Result<Unit>> get() = _sendResult
+    private val _sendResult = MutableLiveData<com.example.fhchatroom.data.Result<Unit>?>(null)
+    val sendResult: LiveData<com.example.fhchatroom.data.Result<Unit>?> get() = _sendResult
+
+    private val _deleteResult = MutableLiveData<com.example.fhchatroom.data.Result<Unit>?>(null)
+    val deleteResult: LiveData<com.example.fhchatroom.data.Result<Unit>?> get() = _deleteResult
+
+    fun clearSendResult() {
+        _sendResult.value = null
+    }
+
+    fun clearDeleteResult() {
+        _deleteResult.value = null
+    }
+
+    private var messageJob: Job? = null
 
     fun setRoomId(roomId: String) {
         _roomId.value = roomId
@@ -58,18 +72,47 @@ class MessageViewModel : ViewModel() {
     }
 
     fun loadMessages() {
-        viewModelScope.launch {
+        messageJob?.cancel()
+        messageJob = viewModelScope.launch {
             if (_roomId.value != null) {
                 messageRepository.getChatMessages(_roomId.value.toString())
-                    .collect { _messages.value = it }
+                    .collect { list ->
+                        val email = _currentUser.value?.email
+                        _messages.value = if (email != null) {
+                            list.filter { !it.deletedFor.contains(email) }
+                        } else list
+                    }
             }
+        }
+    }
+
+    fun deleteMessageForEveryone(message: Message) {
+        viewModelScope.launch {
+            _deleteResult.value = messageRepository.deleteMessage(
+                _roomId.value.toString(),
+                message.id
+            )
+        }
+    }
+
+    fun deleteMessageForMe(message: Message) {
+        val email = _currentUser.value?.email ?: return
+        viewModelScope.launch {
+            _deleteResult.value = messageRepository.markMessageDeletedForUser(
+                _roomId.value.toString(),
+                message.id,
+                email
+            )
         }
     }
 
     private fun loadCurrentUser() {
         viewModelScope.launch {
             when (val result = userRepository.getCurrentUser()) {
-                is Success -> _currentUser.value = result.data
+                is Success -> {
+                    _currentUser.value = result.data
+                    loadMessages()
+                }
                 is Error -> {
                     Log.e("MessageViewModel", "Failed to load current user", result.exception)
                 }
