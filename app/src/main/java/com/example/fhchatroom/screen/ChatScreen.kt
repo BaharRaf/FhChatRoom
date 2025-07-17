@@ -3,7 +3,9 @@ package com.example.fhchatroom.screen
 import android.os.Build
 import android.widget.Toast
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,10 +22,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,50 +59,57 @@ fun ChatScreen(
     onShowMembers: () -> Unit,
     onBack: () -> Unit = {}
 ) {
-    // Observe messages & set room
+    // Observe messages and initialize the chat room
     val messages by messageViewModel.messages.observeAsState(emptyList())
     messageViewModel.setRoomId(roomId)
 
-    // Input state
+    // UI state for message input
     val textState = remember { mutableStateOf("") }
     val sendResult by messageViewModel.sendResult.observeAsState()
     val context = LocalContext.current
+
+    // UI state for deletion dialog
+    val showDeleteDialog = remember { mutableStateOf(false) }
+    val selectedMessage = remember { mutableStateOf<Message?>(null) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // extra gap from the top
+        // Top bar with back button and members menu
         Spacer(modifier = Modifier.height(16.dp))
-
-        // Header with title + Members button
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { onBack() }) {
+            IconButton(onClick = onBack) {
                 Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
             }
             Text(text = "Chat", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            IconButton(onClick = { onShowMembers() }) {
+            IconButton(onClick = onShowMembers) {
                 Icon(imageVector = Icons.Filled.MoreVert, contentDescription = "Members Menu")
             }
         }
 
-
-
-
-    // Messages list
+        // Messages list
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(messages) { message ->
+                // Determine if this message was sent by the current user
                 val isMine = message.senderId == messageViewModel.currentUser.value?.email
-                ChatMessageItem(message = message.copy(isSentByCurrentUser = isMine))
+                ChatMessageItem(
+                    message = message.copy(isSentByCurrentUser = isMine),
+                    onLongPress = {
+                        // On long press, select message and show delete options
+                        selectedMessage.value = message
+                        showDeleteDialog.value = true
+                    }
+                )
             }
         }
 
-        // Input row with visible box
+        // Input field and send button
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -121,7 +132,7 @@ fun ChatScreen(
                     if (content.isNotEmpty()) {
                         messageViewModel.sendMessage(content)
                         textState.value = ""
-                        messageViewModel.loadMessages()
+                        // (Re-loading messages is handled via snapshot listener automatically)
                     }
                 }
             ) {
@@ -130,30 +141,94 @@ fun ChatScreen(
         }
     }
 
-    // Toast on send success/failure
-    LaunchedEffect(sendResult) {
-        when (val r = sendResult) {
-            is Result.Success -> {
-                Toast.makeText(context, "Message sent", Toast.LENGTH_SHORT).show()
-                messageViewModel.clearSendResult()
+    // Deletion confirmation dialog
+    if (showDeleteDialog.value && selectedMessage.value != null) {
+        val message = selectedMessage.value!!
+        val isSender = message.senderId == messageViewModel.currentUser.value?.email
+        AlertDialog(
+            onDismissRequest = {
+                showDeleteDialog.value = false
+                selectedMessage.value = null
+            },
+            title = { Text("Delete Message") },
+            text = {
+                if (isSender) {
+                    Text("Delete this message for everyone or just for you?")
+                } else {
+                    Text("Delete this message for you? (It will remain visible to others.)")
+                }
+            },
+            confirmButton = {
+                // "Delete for everyone" if user is sender, otherwise "Delete for me"
+                if (isSender) {
+                    TextButton(onClick = {
+                        // Delete the message for everyone (remove from Firestore)
+                        messageViewModel.deleteMessageForEveryone(roomId, message.id!!)
+                        showDeleteDialog.value = false
+                        selectedMessage.value = null
+                    }) {
+                        Text("Delete for everyone")
+                    }
+                } else {
+                    TextButton(onClick = {
+                        // Delete the message for me (current user only)
+                        messageViewModel.deleteMessageForMe(roomId, message.id!!, messageViewModel.currentUser.value!!.email)
+                        showDeleteDialog.value = false
+                        selectedMessage.value = null
+                    }) {
+                        Text("Delete for me")
+                    }
+                }
+            },
+            dismissButton = {
+                if (isSender) {
+                    // If sender, the dismiss button serves as "Delete for me"
+                    TextButton(onClick = {
+                        messageViewModel.deleteMessageForMe(roomId, message.id!!, messageViewModel.currentUser.value!!.email)
+                        showDeleteDialog.value = false
+                        selectedMessage.value = null
+                    }) {
+                        Text("Delete for me")
+                    }
+                } else {
+                    // If not sender, offer a Cancel option
+                    TextButton(onClick = {
+                        showDeleteDialog.value = false
+                        selectedMessage.value = null
+                    }) {
+                        Text("Cancel")
+                    }
+                }
             }
-            is Result.Error -> {
-                Toast.makeText(context, "Failed to send: ${r.exception.message}", Toast.LENGTH_LONG).show()
-                messageViewModel.clearSendResult()
-            }
-            else -> {}
-        }
+        )
     }
 
+    // Toast feedback on send success/failure
+    LaunchedEffect(sendResult) {
+        when (val result = sendResult) {
+            is Result.Success -> {
+                Toast.makeText(context, "Message sent", Toast.LENGTH_SHORT).show()
+            }
+            is Result.Error -> {
+                Toast.makeText(context, "Failed to send: ${result.exception.message}", Toast.LENGTH_LONG).show()
+            }
+            else -> { /* No action for loading/idle states */ }
+        }
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun ChatMessageItem(message: Message) {
+fun ChatMessageItem(message: Message, onLongPress: () -> Unit = {}) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp),
+            .padding(8.dp)
+            .combinedClickable(
+                onLongClick = onLongPress,
+                onClick = {}  // We only handle long-press for context menu
+            ),
         horizontalAlignment = if (message.isSentByCurrentUser) Alignment.End else Alignment.Start
     ) {
         Box(
@@ -190,6 +265,6 @@ private fun formatTimestamp(timestamp: Long): String {
     return when {
         dt.toLocalDate() == now.toLocalDate() -> "today ${dt.format(timeFmt)}"
         dt.toLocalDate().plusDays(1) == now.toLocalDate() -> "yesterday ${dt.format(timeFmt)}"
-        else -> dt.format(DateTimeFormatter.ofPattern("MMM d,yyyy"))
-            }
+        else -> dt.format(DateTimeFormatter.ofPattern("MMM d, yyyy"))
+    }
 }
