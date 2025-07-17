@@ -17,7 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -90,7 +90,7 @@ fun ChatRoomListScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.clickable { sortMenuExpanded = true }
             ) {
-                Icon(imageVector = Icons.Filled.Sort, contentDescription = "Sort")
+                Icon(imageVector = Icons.Filled.List, contentDescription = "Sort")
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Sort")
             }
