@@ -17,6 +17,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -36,6 +38,12 @@ import com.example.fhchatroom.data.Room
 import com.example.fhchatroom.viewmodel.RoomViewModel
 import com.google.firebase.auth.FirebaseAuth
 
+enum class SortOption(val label: String) {
+    NAME("Name"),
+    DESCRIPTION("Description"),
+    DATE("Date")
+}
+
 @Composable
 fun ChatRoomListScreen(
     roomViewModel: RoomViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
@@ -48,6 +56,9 @@ fun ChatRoomListScreen(
     var showDialog by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
+    var sortMenuExpanded by remember { mutableStateOf(false) }
+    var sortOption by remember { mutableStateOf(SortOption.DATE) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         // Include the top app bar with Logout and theme toggle.
@@ -55,10 +66,46 @@ fun ChatRoomListScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Search rooms") },
+            singleLine = true
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = { sortMenuExpanded = true }) {
+                Text("Sort: ${'$'}{sortOption.label}")
+            }
+            DropdownMenu(expanded = sortMenuExpanded, onDismissRequest = { sortMenuExpanded = false }) {
+                SortOption.values().forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option.label) },
+                        onClick = {
+                            sortOption = option
+                            sortMenuExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
         // List of available chat rooms with descriptions
         val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email
+        val filteredRooms = rooms.filter {
+            it.name.contains(searchQuery, ignoreCase = true) ||
+                    it.description.contains(searchQuery, ignoreCase = true)
+        }
+        val sortedRooms = when (sortOption) {
+            SortOption.NAME -> filteredRooms.sortedBy { it.name.lowercase() }
+            SortOption.DESCRIPTION -> filteredRooms.sortedBy { it.description.lowercase() }
+            SortOption.DATE -> filteredRooms.sortedBy { it.createdAt }
+        }
         LazyColumn {
-            items(rooms) { room ->
+            items(sortedRooms) { room ->
                 // Determine if user is already a member and if user is the room creator
                 val isMember = currentUserEmail != null && room.members.contains(currentUserEmail)
                 // **Updated**: Use `ownerEmail` to identify room creator (even if they've left the room)
@@ -81,11 +128,11 @@ fun ChatRoomListScreen(
                             roomViewModel.joinRoom(room.id)
                         }
                         // Navigate to the chat screen for this room
-                        onJoinClicked(room)
-                    }
-                )
-            }
+                    onJoinClicked(room)
+                }
+            )
         }
+    }
 
         Spacer(modifier = Modifier.height(16.dp))
 

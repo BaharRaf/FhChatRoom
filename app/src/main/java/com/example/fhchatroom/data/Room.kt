@@ -5,5 +5,6 @@ data class Room(
     val name: String = "",
     val description: String = "",
     val members: List<String> = emptyList(),
-    val ownerEmail: String = ""
+    val ownerEmail: String = "",
+    val createdAt: Long = System.currentTimeMillis()
 )

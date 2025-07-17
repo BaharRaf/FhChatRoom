@@ -48,7 +48,8 @@ class RoomViewModel : ViewModel() {
             name = name,
             description = description,
             members = currentUserEmail?.let { listOf(it) } ?: emptyList(),
-            ownerEmail = currentUserEmail ?: ""  // **Added**: store creator's email as owner
+            ownerEmail = currentUserEmail ?: "",  // **Added**: store creator's email as owner
+            createdAt = System.currentTimeMillis()
         )
         firestore.collection("rooms").add(newRoom)
     }
