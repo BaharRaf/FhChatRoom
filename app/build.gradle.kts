@@ -57,6 +57,12 @@ dependencies {
     implementation(libs.androidx.runtime.livedata)
     implementation(libs.firebase.database.ktx)
     implementation(libs.androidx.lifecycle.process)
+    implementation(libs.firebase.inappmessaging.ktx)
+    implementation(libs.androidx.room.runtime.android)
+    implementation(libs.firebase.storage.ktx)
+    implementation(libs.androidx.animation.core.android)
+    implementation(libs.androidx.foundation.android)
+    implementation(libs.androidx.animation.core.android)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -66,10 +72,14 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation("io.coil-kt:coil-compose:2.5.0")
+    implementation(platform("com.google.firebase:firebase-bom:33.0.0"))
+    implementation("com.google.firebase:firebase-storage-ktx")
+    implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-inappmessaging-ktx")
+    implementation ("androidx.compose.material:material-icons-extended")
 
-
-
-
+    implementation("com.google.firebase:firebase-inappmessaging-ktx")
 
 
 

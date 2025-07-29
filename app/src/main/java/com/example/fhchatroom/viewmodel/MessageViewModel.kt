@@ -1,5 +1,7 @@
 package com.example.fhchatroom.viewmodel
 
+import android.graphics.Bitmap
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -13,12 +15,20 @@ import com.example.fhchatroom.data.Result.Success
 import com.example.fhchatroom.data.User
 import com.example.fhchatroom.data.UserRepository
 import com.google.firebase.auth.FirebaseAuth
+//import com.google.firebase.inappmessaging.model.MessageType
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.util.UUID
+import com.example.fhchatroom.data.MessageType
 
 class MessageViewModel : ViewModel() {
 
     private val messageRepository: MessageRepository
     private val userRepository: UserRepository
+    private val storage = FirebaseStorage.getInstance()
 
     init {
         messageRepository = MessageRepository(Injection.instance())
@@ -39,9 +49,11 @@ class MessageViewModel : ViewModel() {
     private val _sendResult = MutableLiveData<com.example.fhchatroom.data.Result<Unit>>()
     val sendResult: LiveData<com.example.fhchatroom.data.Result<Unit>> get() = _sendResult
 
+    private val _uploadProgress = MutableLiveData<Float>()
+    val uploadProgress: LiveData<Float> get() = _uploadProgress
+
     fun setRoomId(roomId: String) {
         _roomId.value = roomId
-        // Only load messages if current user is already known; otherwise, wait for user to load
         if (_currentUser.value != null) {
             loadMessages()
         }
@@ -52,7 +64,8 @@ class MessageViewModel : ViewModel() {
             val message = Message(
                 senderFirstName = _currentUser.value!!.firstName,
                 senderId = _currentUser.value!!.email,
-                text = text
+                text = text,
+                type = MessageType.TEXT
             )
             viewModelScope.launch {
                 val result = messageRepository.sendMessage(_roomId.value.toString(), message)
@@ -61,11 +74,124 @@ class MessageViewModel : ViewModel() {
         }
     }
 
+    fun sendPhotoMessage(uri: Uri, roomId: String) {
+        viewModelScope.launch {
+            try {
+                _uploadProgress.value = 0f
+                val fileName = "images/${UUID.randomUUID()}.jpg"
+                val storageRef = storage.reference.child(fileName)
+
+                val uploadTask = storageRef.putFile(uri)
+
+                uploadTask.addOnProgressListener { snapshot ->
+                    val progress = (100.0 * snapshot.bytesTransferred / snapshot.totalByteCount).toFloat()
+                    _uploadProgress.value = progress
+                }
+
+                uploadTask.await()
+                val downloadUrl = storageRef.downloadUrl.await().toString()
+
+                val message = Message(
+                    senderFirstName = _currentUser.value!!.firstName,
+                    senderId = _currentUser.value!!.email,
+                    text = "Photo",
+                    type = MessageType.IMAGE,
+                    mediaUrl = downloadUrl
+                )
+
+                val result = messageRepository.sendMessage(roomId, message)
+                _sendResult.value = result
+                _uploadProgress.value = 100f
+            } catch (e: Exception) {
+                _sendResult.value = Error(e)
+                Log.e("MessageViewModel", "Failed to upload photo", e)
+            }
+        }
+    }
+
+    fun sendCameraPhoto(bitmap: Bitmap, roomId: String) {
+        viewModelScope.launch {
+            try {
+                _uploadProgress.value = 0f
+                val fileName = "images/${UUID.randomUUID()}.jpg"
+                val storageRef = storage.reference.child(fileName)
+
+                // Convert bitmap to byte array
+                val baos = ByteArrayOutputStream()
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, baos)
+                val data = baos.toByteArray()
+
+                val uploadTask = storageRef.putBytes(data)
+
+                uploadTask.addOnProgressListener { snapshot ->
+                    val progress = (100.0 * snapshot.bytesTransferred / snapshot.totalByteCount).toFloat()
+                    _uploadProgress.value = progress
+                }
+
+                uploadTask.await()
+                val downloadUrl = storageRef.downloadUrl.await().toString()
+
+                val message = Message(
+                    senderFirstName = _currentUser.value!!.firstName,
+                    senderId = _currentUser.value!!.email,
+                    text = "Photo",
+                    type = MessageType.IMAGE,
+                    mediaUrl = downloadUrl
+                )
+
+                val result = messageRepository.sendMessage(roomId, message)
+                _sendResult.value = result
+                _uploadProgress.value = 100f
+            } catch (e: Exception) {
+                _sendResult.value = Error(e)
+                Log.e("MessageViewModel", "Failed to upload camera photo", e)
+            }
+        }
+    }
+
+    fun sendVoiceMessage(audioFile: File, duration: Int, roomId: String) {
+        viewModelScope.launch {
+            try {
+                _uploadProgress.value = 0f
+                val fileName = "voice/${UUID.randomUUID()}.3gp"
+                val storageRef = storage.reference.child(fileName)
+
+                val uploadTask = storageRef.putFile(Uri.fromFile(audioFile))
+
+                uploadTask.addOnProgressListener { snapshot ->
+                    val progress = (100.0 * snapshot.bytesTransferred / snapshot.totalByteCount).toFloat()
+                    _uploadProgress.value = progress
+                }
+
+                uploadTask.await()
+                val downloadUrl = storageRef.downloadUrl.await().toString()
+
+                // Delete local file after upload
+                audioFile.delete()
+
+                val message = Message(
+                    senderFirstName = _currentUser.value!!.firstName,
+                    senderId = _currentUser.value!!.email,
+                    text = "Voice message",
+                    type = MessageType.VOICE,
+                    mediaUrl = downloadUrl,
+                    mediaDuration = duration
+                )
+
+                val result = messageRepository.sendMessage(roomId, message)
+                _sendResult.value = result
+                _uploadProgress.value = 100f
+            } catch (e: Exception) {
+                _sendResult.value = Error(e)
+                Log.e("MessageViewModel", "Failed to upload voice message", e)
+            }
+        }
+    }
+
     fun loadMessages() {
         viewModelScope.launch {
             val room = _roomId.value ?: return@launch
             val userEmail = _currentUser.value?.email ?: return@launch
-            // Collect messages from repository, filtering out those deleted for this user
             messageRepository.getChatMessages(room, userEmail).collect { fetchedMessages ->
                 _messages.value = fetchedMessages
             }
@@ -77,7 +203,6 @@ class MessageViewModel : ViewModel() {
             when (val result = userRepository.getCurrentUser()) {
                 is Success -> {
                     _currentUser.value = result.data
-                    // If a chat room is already set, load messages now that user is known
                     if (_roomId.value != null) {
                         loadMessages()
                     }
@@ -89,7 +214,6 @@ class MessageViewModel : ViewModel() {
         }
     }
 
-    // NEW: Expose deletion methods from the repository
     fun deleteMessageForEveryone(roomId: String, messageId: String) {
         viewModelScope.launch {
             messageRepository.deleteMessageForEveryone(roomId, messageId)
