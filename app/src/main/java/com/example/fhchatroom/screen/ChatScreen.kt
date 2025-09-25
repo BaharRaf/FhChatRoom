@@ -2,6 +2,9 @@ package com.example.fhchatroom.screen
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.pm.PackageManager
 import android.media.MediaPlayer
 import android.media.MediaRecorder
@@ -11,6 +14,9 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -29,17 +35,24 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
@@ -66,8 +79,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -78,12 +94,12 @@ import com.example.fhchatroom.data.MessageType
 import com.example.fhchatroom.data.Result
 import com.example.fhchatroom.viewmodel.MessageViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.File
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -103,6 +119,31 @@ fun ChatScreen(
 
     val showDeleteDialog = remember { mutableStateOf(false) }
     val selectedMessage = remember { mutableStateOf<Message?>(null) }
+
+    // Search states
+    var showSearchBar by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var currentSearchIndex by remember { mutableStateOf(-1) }
+    val lazyListState = rememberLazyListState()
+
+    // Filter messages based on search query
+    val filteredMessages = if (searchQuery.isEmpty()) {
+        messages
+    } else {
+        messages
+    }
+
+    // Find messages that match search query
+    val searchMatches = if (searchQuery.isNotEmpty()) {
+        messages.mapIndexedNotNull { index, message ->
+            if (message.text.contains(searchQuery, ignoreCase = true) ||
+                message.senderFirstName.contains(searchQuery, ignoreCase = true)) {
+                index
+            } else null
+        }
+    } else {
+        emptyList()
+    }
 
     // Voice recording states
     var isRecording by remember { mutableStateOf(false) }
@@ -143,6 +184,10 @@ fun ChatScreen(
         }
     }
 
+    // Message options menu
+    var showMessageMenu by remember { mutableStateOf(false) }
+    var menuMessage by remember { mutableStateOf<Message?>(null) }
+
     // Show attachment options dialog
     var showAttachmentDialog by remember { mutableStateOf(false) }
 
@@ -157,12 +202,21 @@ fun ChatScreen(
         }
     }
 
+    // Scroll to search match
+    LaunchedEffect(currentSearchIndex) {
+        if (currentSearchIndex >= 0 && currentSearchIndex < searchMatches.size) {
+            coroutineScope.launch {
+                lazyListState.animateScrollToItem(searchMatches[currentSearchIndex])
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Top bar
+        // Top bar with search
         Spacer(modifier = Modifier.height(16.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -173,23 +227,208 @@ fun ChatScreen(
                 Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
             }
             Text(text = "Chat", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            IconButton(onClick = onShowMembers) {
-                Icon(imageVector = Icons.Filled.MoreVert, contentDescription = "Members Menu")
+            Row {
+                // Search button
+                IconButton(onClick = {
+                    showSearchBar = !showSearchBar
+                    if (!showSearchBar) {
+                        searchQuery = ""
+                        currentSearchIndex = -1
+                    }
+                }) {
+                    Icon(
+                        imageVector = if (showSearchBar) Icons.Default.Clear else Icons.Default.Search,
+                        contentDescription = if (showSearchBar) "Close Search" else "Search Messages"
+                    )
+                }
+                IconButton(onClick = onShowMembers) {
+                    Icon(imageVector = Icons.Filled.MoreVert, contentDescription = "Members Menu")
+                }
+            }
+        }
+
+        // Search bar
+        AnimatedVisibility(
+            visible = showSearchBar,
+            enter = expandVertically(),
+            exit = shrinkVertically()
+        ) {
+            Column {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = {
+                        searchQuery = it
+                        currentSearchIndex = if (it.isNotEmpty() && searchMatches.isNotEmpty()) 0 else -1
+                    },
+                    label = { Text("Search messages...") },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = "Search")
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = {
+                                searchQuery = ""
+                                currentSearchIndex = -1
+                            }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    singleLine = true
+                )
+
+                // Search navigation
+                if (searchMatches.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${currentSearchIndex + 1} of ${searchMatches.size} matches",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row {
+                            IconButton(
+                                onClick = {
+                                    if (currentSearchIndex > 0) {
+                                        currentSearchIndex--
+                                    }
+                                },
+                                enabled = currentSearchIndex > 0
+                            ) {
+                                Icon(Icons.Default.KeyboardArrowUp, "Previous")
+                            }
+                            IconButton(
+                                onClick = {
+                                    if (currentSearchIndex < searchMatches.size - 1) {
+                                        currentSearchIndex++
+                                    }
+                                },
+                                enabled = currentSearchIndex < searchMatches.size - 1
+                            ) {
+                                Icon(Icons.Default.KeyboardArrowDown, "Next")
+                            }
+                        }
+                    }
+                }
             }
         }
 
         // Messages list
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            items(messages) { message ->
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            state = lazyListState
+        ) {
+            items(messages.mapIndexed { index, message -> index to message }) { (index, message) ->
                 val isMine = message.senderId == messageViewModel.currentUser.value?.email
+                val isHighlighted = searchQuery.isNotEmpty() &&
+                        searchMatches.contains(index) &&
+                        searchMatches.indexOf(index) == currentSearchIndex
+
                 ChatMessageItem(
                     message = message.copy(isSentByCurrentUser = isMine),
+                    searchQuery = searchQuery,
+                    isHighlighted = isHighlighted,
                     onLongPress = {
-                        selectedMessage.value = message
-                        showDeleteDialog.value = true
+                        menuMessage = message
+                        showMessageMenu = true
                     }
                 )
             }
+        }
+
+        // Message options dropdown menu
+        if (showMessageMenu && menuMessage != null) {
+            val msg = menuMessage!!
+            val isSender = msg.senderId == messageViewModel.currentUser.value?.email
+
+            AlertDialog(
+                onDismissRequest = {
+                    showMessageMenu = false
+                    menuMessage = null
+                },
+                title = { Text("Message Options") },
+                text = {
+                    Column {
+                        // Copy option (only for text messages)
+                        if (msg.type == MessageType.TEXT) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        val clip = ClipData.newPlainText("message", msg.text)
+                                        clipboard.setPrimaryClip(clip)
+                                        Toast.makeText(context, "Message copied to clipboard", Toast.LENGTH_SHORT).show()
+                                        showMessageMenu = false
+                                        menuMessage = null
+                                    }
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text("Copy Message")
+                            }
+                        }
+
+                        // Delete for me
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    messageViewModel.deleteMessageForMe(
+                                        roomId,
+                                        msg.id!!,
+                                        messageViewModel.currentUser.value!!.email
+                                    )
+                                    showMessageMenu = false
+                                    menuMessage = null
+                                }
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete")
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text("Delete for me")
+                        }
+
+                        // Delete for everyone (only for sender)
+                        if (isSender) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        messageViewModel.deleteMessageForEveryone(roomId, msg.id!!)
+                                        showMessageMenu = false
+                                        menuMessage = null
+                                    }
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red)
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text("Delete for everyone", color = Color.Red)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showMessageMenu = false
+                        menuMessage = null
+                    }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
 
         // Voice recording indicator
@@ -347,63 +586,6 @@ fun ChatScreen(
         )
     }
 
-    // Delete dialog (unchanged)
-    if (showDeleteDialog.value && selectedMessage.value != null) {
-        val message = selectedMessage.value!!
-        val isSender = message.senderId == messageViewModel.currentUser.value?.email
-        AlertDialog(
-            onDismissRequest = {
-                showDeleteDialog.value = false
-                selectedMessage.value = null
-            },
-            title = { Text("Delete Message") },
-            text = {
-                if (isSender) {
-                    Text("Delete this message for everyone or just for you?")
-                } else {
-                    Text("Delete this message for you? (It will remain visible to others.)")
-                }
-            },
-            confirmButton = {
-                if (isSender) {
-                    TextButton(onClick = {
-                        messageViewModel.deleteMessageForEveryone(roomId, message.id!!)
-                        showDeleteDialog.value = false
-                        selectedMessage.value = null
-                    }) {
-                        Text("Delete for everyone")
-                    }
-                } else {
-                    TextButton(onClick = {
-                        messageViewModel.deleteMessageForMe(roomId, message.id!!, messageViewModel.currentUser.value!!.email)
-                        showDeleteDialog.value = false
-                        selectedMessage.value = null
-                    }) {
-                        Text("Delete for me")
-                    }
-                }
-            },
-            dismissButton = {
-                if (isSender) {
-                    TextButton(onClick = {
-                        messageViewModel.deleteMessageForMe(roomId, message.id!!, messageViewModel.currentUser.value!!.email)
-                        showDeleteDialog.value = false
-                        selectedMessage.value = null
-                    }) {
-                        Text("Delete for me")
-                    }
-                } else {
-                    TextButton(onClick = {
-                        showDeleteDialog.value = false
-                        selectedMessage.value = null
-                    }) {
-                        Text("Cancel")
-                    }
-                }
-            }
-        )
-    }
-
     LaunchedEffect(sendResult) {
         when (val result = sendResult) {
             is Result.Success -> {
@@ -420,7 +602,12 @@ fun ChatScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun ChatMessageItem(message: Message, onLongPress: () -> Unit = {}) {
+fun ChatMessageItem(
+    message: Message,
+    searchQuery: String = "",
+    isHighlighted: Boolean = false,
+    onLongPress: () -> Unit = {}
+) {
     var isPlaying by remember { mutableStateOf(false) }
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
 
@@ -437,18 +624,56 @@ fun ChatMessageItem(message: Message, onLongPress: () -> Unit = {}) {
         Box(
             modifier = Modifier
                 .background(
-                    color = if (message.isSentByCurrentUser) Color(0xFFBB86FC) else Color.Gray,
+                    color = when {
+                        isHighlighted -> MaterialTheme.colorScheme.tertiaryContainer
+                        message.isSentByCurrentUser -> Color(0xFFBB86FC)
+                        else -> Color.Gray
+                    },
                     shape = RoundedCornerShape(8.dp)
                 )
                 .padding(8.dp)
         ) {
             when (message.type) {
                 MessageType.TEXT -> {
-                    Text(
-                        text = message.text,
-                        color = Color.White,
-                        style = TextStyle(fontSize = 16.sp)
-                    )
+                    // Highlight search terms in text
+                    if (searchQuery.isNotEmpty() && message.text.contains(searchQuery, ignoreCase = true)) {
+                        val annotatedString = buildAnnotatedString {
+                            var currentIndex = 0
+                            val lowerText = message.text.lowercase()
+                            val lowerQuery = searchQuery.lowercase()
+
+                            while (currentIndex < message.text.length) {
+                                val index = lowerText.indexOf(lowerQuery, currentIndex)
+                                if (index >= currentIndex) {
+                                    // Add text before match
+                                    append(message.text.substring(currentIndex, index))
+                                    // Add highlighted match
+                                    withStyle(style = SpanStyle(
+                                        background = Color.Yellow.copy(alpha = 0.5f),
+                                        fontWeight = FontWeight.Bold
+                                    )) {
+                                        append(message.text.substring(index, index + searchQuery.length))
+                                    }
+                                    currentIndex = index + searchQuery.length
+                                } else {
+                                    // Add remaining text
+                                    append(message.text.substring(currentIndex))
+                                    break
+                                }
+                            }
+                        }
+                        Text(
+                            text = annotatedString,
+                            color = Color.White,
+                            style = TextStyle(fontSize = 16.sp)
+                        )
+                    } else {
+                        Text(
+                            text = message.text,
+                            color = Color.White,
+                            style = TextStyle(fontSize = 16.sp)
+                        )
+                    }
                 }
                 MessageType.IMAGE -> {
                     message.mediaUrl?.let { url ->
@@ -510,10 +735,22 @@ fun ChatMessageItem(message: Message, onLongPress: () -> Unit = {}) {
             }
         }
         Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = message.senderFirstName,
-            style = TextStyle(fontSize = 12.sp, color = Color.Gray)
-        )
+        // Highlight sender name if it matches search
+        if (searchQuery.isNotEmpty() && message.senderFirstName.contains(searchQuery, ignoreCase = true)) {
+            Text(
+                text = message.senderFirstName,
+                style = TextStyle(
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            )
+        } else {
+            Text(
+                text = message.senderFirstName,
+                style = TextStyle(fontSize = 12.sp, color = Color.Gray)
+            )
+        }
         Text(
             text = formatTimestamp(message.timestamp),
             style = TextStyle(fontSize = 12.sp, color = Color.Gray)
