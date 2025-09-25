@@ -88,8 +88,8 @@ fun ChatRoomListScreen(
         SortOption.NAME_DESC -> filteredRooms.sortedByDescending { it.name.lowercase() }
         SortOption.MEMBER_COUNT_ASC -> filteredRooms.sortedBy { it.members.size }
         SortOption.MEMBER_COUNT_DESC -> filteredRooms.sortedByDescending { it.members.size }
-        SortOption.NEWEST_FIRST -> filteredRooms.reversed() // Assuming newer rooms are added to the end
-        SortOption.OLDEST_FIRST -> filteredRooms
+        SortOption.NEWEST_FIRST -> filteredRooms.sortedByDescending { it.lastMessageTimestamp }
+        SortOption.OLDEST_FIRST -> filteredRooms.sortedBy { it.lastMessageTimestamp }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -397,14 +397,47 @@ fun RoomItem(
                         }
                     }
                 }
-                if (room.description.isNotEmpty()) {
+
+                // Last message preview
+                if (room.lastMessage.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.padding(top = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${room.lastMessageSender}: ",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = room.lastMessage,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, false)
+                        )
+                        if (room.lastMessageTimestamp > 0) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = formatMessageTime(room.lastMessageTimestamp),
+                                fontSize = 11.sp,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                } else if (room.description.isNotEmpty()) {
                     Text(
                         text = room.description,
                         fontSize = 14.sp,
                         color = Color.Gray,
-                        modifier = Modifier.padding(top = 4.dp)
+                        modifier = Modifier.padding(top = 4.dp),
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                 }
+
                 Text(
                     text = "$memberCount ${if (memberCount == 1) "member" else "members"}",
                     fontSize = 12.sp,
@@ -423,6 +456,24 @@ fun RoomItem(
                     }
                 }
             }
+        }
+    }
+}
+
+// Helper function to format timestamp for last message
+fun formatMessageTime(timestamp: Long): String {
+    val now = System.currentTimeMillis()
+    val diff = now - timestamp
+
+    return when {
+        diff < 60_000 -> "now" // Less than 1 minute
+        diff < 3_600_000 -> "${diff / 60_000}m" // Less than 1 hour
+        diff < 86_400_000 -> "${diff / 3_600_000}h" // Less than 24 hours
+        diff < 604_800_000 -> "${diff / 86_400_000}d" // Less than 7 days
+        else -> {
+            val date = java.util.Date(timestamp)
+            val format = java.text.SimpleDateFormat("MMM dd", java.util.Locale.getDefault())
+            format.format(date)
         }
     }
 }
