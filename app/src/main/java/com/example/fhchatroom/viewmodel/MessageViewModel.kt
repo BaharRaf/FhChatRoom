@@ -15,7 +15,7 @@ import com.example.fhchatroom.data.Result.Success
 import com.example.fhchatroom.data.User
 import com.example.fhchatroom.data.UserRepository
 import com.google.firebase.auth.FirebaseAuth
-//import com.google.firebase.inappmessaging.model.MessageType
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -29,6 +29,7 @@ class MessageViewModel : ViewModel() {
     private val messageRepository: MessageRepository
     private val userRepository: UserRepository
     private val storage = FirebaseStorage.getInstance()
+    private val firestore = Injection.instance()
 
     init {
         messageRepository = MessageRepository(Injection.instance())
@@ -59,13 +60,20 @@ class MessageViewModel : ViewModel() {
         }
     }
 
-    fun sendMessage(text: String) {
+    fun sendMessage(text: String, replyToMessage: Message? = null) {
         if (_currentUser.value != null) {
             val message = Message(
                 senderFirstName = _currentUser.value!!.firstName,
                 senderId = _currentUser.value!!.email,
                 text = text,
-                type = MessageType.TEXT
+                type = MessageType.TEXT,
+                replyToMessageId = replyToMessage?.id,
+                replyToMessageText = when(replyToMessage?.type) {
+                    MessageType.IMAGE -> "📷 Photo"
+                    MessageType.VOICE -> "🎤 Voice message"
+                    else -> replyToMessage?.text
+                },
+                replyToSenderName = replyToMessage?.senderFirstName
             )
             viewModelScope.launch {
                 val result = messageRepository.sendMessage(_roomId.value.toString(), message)
@@ -116,7 +124,6 @@ class MessageViewModel : ViewModel() {
                 val fileName = "images/${UUID.randomUUID()}.jpg"
                 val storageRef = storage.reference.child(fileName)
 
-                // Convert bitmap to byte array
                 val baos = ByteArrayOutputStream()
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 90, baos)
                 val data = baos.toByteArray()
@@ -166,7 +173,6 @@ class MessageViewModel : ViewModel() {
                 uploadTask.await()
                 val downloadUrl = storageRef.downloadUrl.await().toString()
 
-                // Delete local file after upload
                 audioFile.delete()
 
                 val message = Message(
@@ -184,6 +190,41 @@ class MessageViewModel : ViewModel() {
             } catch (e: Exception) {
                 _sendResult.value = Error(e)
                 Log.e("MessageViewModel", "Failed to upload voice message", e)
+            }
+        }
+    }
+
+    fun addReaction(roomId: String, messageId: String, emoji: String) {
+        viewModelScope.launch {
+            try {
+                val userEmail = _currentUser.value?.email ?: return@launch
+
+                // Get current message to check existing reactions
+                val messageDoc = firestore.collection("rooms")
+                    .document(roomId)
+                    .collection("messages")
+                    .document(messageId)
+                    .get()
+                    .await()
+
+                val currentReactions = messageDoc.get("reactions") as? Map<String, String> ?: emptyMap()
+
+                // Toggle reaction - remove if already exists with same emoji, otherwise add/update
+                val updatedReactions = if (currentReactions[userEmail] == emoji) {
+                    currentReactions - userEmail
+                } else {
+                    currentReactions + (userEmail to emoji)
+                }
+
+                firestore.collection("rooms")
+                    .document(roomId)
+                    .collection("messages")
+                    .document(messageId)
+                    .update("reactions", updatedReactions)
+                    .await()
+
+            } catch (e: Exception) {
+                Log.e("MessageViewModel", "Failed to add reaction", e)
             }
         }
     }
