@@ -61,6 +61,7 @@ fun ChatRoomListScreen(
     roomViewModel: RoomViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     onJoinClicked: (Room) -> Unit,
     onLogout: () -> Unit,
+    onNavigateToProfile: () -> Unit,
     isDarkTheme: Boolean,
     onToggleTheme: () -> Unit
 ) {
@@ -94,7 +95,12 @@ fun ChatRoomListScreen(
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         // Include the top app bar with Logout and theme toggle.
-        ChatAppTopBar(onLogout = onLogout, isDarkTheme = isDarkTheme, onToggleTheme = onToggleTheme)
+        ChatAppTopBar(
+            onLogout = onLogout,
+            onNavigateToProfile = onNavigateToProfile,
+            isDarkTheme = isDarkTheme,
+            onToggleTheme = onToggleTheme
+        )
 
         Spacer(modifier = Modifier.height(8.dp))
 
