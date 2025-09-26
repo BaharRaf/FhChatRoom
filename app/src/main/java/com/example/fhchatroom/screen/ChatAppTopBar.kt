@@ -1,9 +1,9 @@
 package com.example.fhchatroom.screen
 
-import android.util.Log
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -16,19 +16,24 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import com.example.fhchatroom.util.OnlineStatusUpdater
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatAppTopBar(
     onLogout: () -> Unit,
     onNavigateToProfile: () -> Unit,
+    onNavigateToFriends: () -> Unit,
     isDarkTheme: Boolean,
     onToggleTheme: () -> Unit
 ) {
     TopAppBar(
         title = { Text("Chat Rooms") },
         actions = {
+            // Friends Icon
+            IconButton(onClick = onNavigateToFriends) {
+                Icon(imageVector = Icons.Filled.People, contentDescription = "Friends")
+            }
+
             // Profile Icon
             IconButton(onClick = onNavigateToProfile) {
                 Icon(imageVector = Icons.Filled.AccountCircle, contentDescription = "Profile")

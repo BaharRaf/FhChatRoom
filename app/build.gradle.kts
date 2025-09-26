@@ -63,6 +63,7 @@ dependencies {
     implementation(libs.androidx.animation.core.android)
     implementation(libs.androidx.foundation.android)
     implementation(libs.androidx.animation.core.android)
+    implementation("androidx.compose.material:material")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

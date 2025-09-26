@@ -71,7 +71,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 @Composable
-fun MemberListScreen(
+fun RoomMemberListScreen(
     roomId: String,
     onBack: () -> Unit,
     onLeaveRoom: () -> Unit = {},
@@ -94,19 +94,11 @@ fun MemberListScreen(
     LaunchedEffect(operationResult) {
         when (operationResult) {
             is com.example.fhchatroom.data.Result.Success -> {
-                Toast.makeText(
-                    context,
-                    (operationResult as Result.Success<String>).data,
-                    Toast.LENGTH_SHORT
-                ).show()
+                Toast.makeText(context, (operationResult as Result.Success<String>).data, Toast.LENGTH_SHORT).show()
                 friendsViewModel.clearOperationResult()
             }
             is com.example.fhchatroom.data.Result.Error -> {
-                Toast.makeText(
-                    context,
-                    (operationResult as Result.Error).exception.message,
-                    Toast.LENGTH_SHORT
-                ).show()
+                Toast.makeText(context, (operationResult as Result.Error).exception.message, Toast.LENGTH_SHORT).show()
                 friendsViewModel.clearOperationResult()
             }
             else -> {}
@@ -142,7 +134,7 @@ fun MemberListScreen(
                                 users.forEach { user ->
                                     val enc = user.email.replace(".", ",")
                                     val ref = database.getReference("status/$enc")
-                                    val listener = object : ValueEventListener {
+                                    val listener = object: ValueEventListener {
                                         override fun onDataChange(ds: DataSnapshot) {
                                             val online = ds.getValue(Boolean::class.java) ?: false
                                             members = members.map {
@@ -150,13 +142,8 @@ fun MemberListScreen(
                                                 else it
                                             }
                                         }
-
                                         override fun onCancelled(e: DatabaseError) {
-                                            Log.e(
-                                                TAG,
-                                                "Status listener cancelled for ${user.email}",
-                                                e.toException()
-                                            )
+                                            Log.e(TAG, "Status listener cancelled for ${user.email}", e.toException())
                                         }
                                     }
                                     ref.addValueEventListener(listener)
@@ -195,10 +182,8 @@ fun MemberListScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("Members", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-            Text(
-                "${members.size} member${if (members.size != 1) "s" else ""}",
-                fontSize = 14.sp, color = Color.Gray
-            )
+            Text("${members.size} member${if (members.size != 1) "s" else ""}",
+                fontSize = 14.sp, color = Color.Gray)
         }
 
         // Members list
@@ -207,7 +192,7 @@ fun MemberListScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(members, key = { it.email }) { user ->
-                MemberItem(
+                RoomMemberItem(
                     user = user,
                     isCurrentUser = user.email == currentUserEmail,
                     onAddFriend = { targetUser ->
@@ -232,7 +217,7 @@ fun MemberListScreen(
                                 .update("members", FieldValue.arrayRemove(email)).await()
                             Toast.makeText(context, "Left room", Toast.LENGTH_SHORT).show()
                             onLeaveRoom()
-                        } catch (e: Exception) {
+                        } catch(e: Exception) {
                             Log.e(TAG, "Leave failed", e)
                             Toast.makeText(context, "Failed to leave", Toast.LENGTH_LONG).show()
                         }
@@ -249,7 +234,7 @@ fun MemberListScreen(
 }
 
 @Composable
-fun MemberItem(
+fun RoomMemberItem(
     user: User,
     isCurrentUser: Boolean,
     onAddFriend: (User) -> Unit,
@@ -445,4 +430,18 @@ fun MemberItem(
             }
         }
     }
+}
+@Composable
+fun FriendsScreen(
+    roomId: String,
+    onBack: () -> Unit,
+    onLeaveRoom: () -> Unit = {},
+    friendsViewModel: FriendsViewModel = viewModel()
+) {
+    RoomMemberListScreen(
+        roomId = roomId,
+        onBack = onBack,
+        onLeaveRoom = onLeaveRoom,
+        friendsViewModel = friendsViewModel
+    )
 }

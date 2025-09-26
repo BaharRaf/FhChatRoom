@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
@@ -62,6 +64,7 @@ fun ChatRoomListScreen(
     onJoinClicked: (Room) -> Unit,
     onLogout: () -> Unit,
     onNavigateToProfile: () -> Unit,
+    onNavigateToFriends: () -> Unit,
     isDarkTheme: Boolean,
     onToggleTheme: () -> Unit
 ) {
@@ -98,6 +101,7 @@ fun ChatRoomListScreen(
         ChatAppTopBar(
             onLogout = onLogout,
             onNavigateToProfile = onNavigateToProfile,
+            onNavigateToFriends = onNavigateToFriends,
             isDarkTheme = isDarkTheme,
             onToggleTheme = onToggleTheme
         )
