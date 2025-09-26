@@ -2,6 +2,7 @@ package com.example.fhchatroom.screen
 
 import android.util.Log
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -21,12 +22,19 @@ import com.google.firebase.firestore.FirebaseFirestore
 @Composable
 fun ChatAppTopBar(
     onLogout: () -> Unit,
+    onNavigateToProfile: () -> Unit,
     isDarkTheme: Boolean,
     onToggleTheme: () -> Unit
 ) {
     TopAppBar(
         title = { Text("Chat Rooms") },
         actions = {
+            // Profile Icon
+            IconButton(onClick = onNavigateToProfile) {
+                Icon(imageVector = Icons.Filled.AccountCircle, contentDescription = "Profile")
+            }
+
+            // Menu with other options
             val menuExpanded = remember { mutableStateOf(false) }
             IconButton(onClick = { menuExpanded.value = true }) {
                 Icon(imageVector = Icons.Filled.MoreVert, contentDescription = "Menu")
@@ -43,21 +51,17 @@ fun ChatAppTopBar(
                     }
                 )
 
-
                 DropdownMenuItem(
                     text = { Text("Logout") },
                     onClick = {
                         val email = FirebaseAuth.getInstance().currentUser?.email
                         val onlineStatusUpdater = OnlineStatusUpdater()
                         if (email != null) {
-
                             // Just mark offline in RTDB and sign out
                             onlineStatusUpdater.goOffline()
                             FirebaseAuth.getInstance().signOut()
                             menuExpanded.value = false
                             onLogout()
-
-
                         } else {
                             // fallback
                             onlineStatusUpdater.goOffline()
@@ -66,7 +70,6 @@ fun ChatAppTopBar(
                             onLogout()
                         }
                     }
-
                 )
             }
         }

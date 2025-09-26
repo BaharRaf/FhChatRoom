@@ -120,6 +120,7 @@ fun NavigationGraph(
         navController = navController,
         startDestination = startDestination
     ) {
+        // Sign Up Screen
         composable(Screen.SignupScreen.route) {
             SignUpScreen(
                 authViewModel = authViewModel,
@@ -130,6 +131,8 @@ fun NavigationGraph(
                 }
             )
         }
+
+        // Login Screen
         composable(Screen.LoginScreen.route) {
             LoginScreen(
                 authViewModel = authViewModel,
@@ -144,6 +147,8 @@ fun NavigationGraph(
                 }
             }
         }
+
+        // Chat Rooms List Screen
         composable(Screen.ChatRoomsScreen.route) {
             ChatRoomListScreen(
                 onJoinClicked = { room ->
@@ -154,10 +159,15 @@ fun NavigationGraph(
                         popUpTo(Screen.ChatRoomsScreen.route) { inclusive = true }
                     }
                 },
+                onNavigateToProfile = {
+                    navController.navigate(Screen.ProfileScreen.route)
+                },
                 isDarkTheme = isDarkTheme,
                 onToggleTheme = onToggleTheme
             )
         }
+
+        // Chat Screen (Individual Room)
         composable("${Screen.ChatScreen.route}/{roomId}") { backStackEntry ->
             val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
             ChatScreen(
@@ -170,6 +180,8 @@ fun NavigationGraph(
                 }
             )
         }
+
+        // Member List Screen
         composable("${Screen.MemberListScreen.route}/{roomId}") { backStackEntry ->
             val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
             MemberListScreen(
@@ -177,6 +189,15 @@ fun NavigationGraph(
                 onBack = { navController.popBackStack() },
                 onLeaveRoom = {
                     navController.popBackStack(Screen.ChatRoomsScreen.route, inclusive = false)
+                }
+            )
+        }
+
+        // Profile Screen
+        composable(Screen.ProfileScreen.route) {
+            ProfileScreen(
+                onBack = {
+                    navController.popBackStack()
                 }
             )
         }

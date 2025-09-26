@@ -1,4 +1,3 @@
-
 package com.example.fhchatroom.data
 
 data class Message(
@@ -11,7 +10,11 @@ data class Message(
     val id: String? = null,
     val type: MessageType = MessageType.TEXT,
     val mediaUrl: String? = null,
-    val mediaDuration: Int? = null // Duration in seconds for voice messages
+    val mediaDuration: Int? = null, // Duration in seconds for voice messages
+    val reactions: Map<String, String> = emptyMap(), // userId to emoji
+    val replyToMessageId: String? = null, // ID of message being replied to
+    val replyToMessageText: String? = null, // Text of original message
+    val replyToSenderName: String? = null // Name of original sender
 )
 
 enum class MessageType {
