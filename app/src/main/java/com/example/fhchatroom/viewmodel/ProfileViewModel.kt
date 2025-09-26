@@ -9,7 +9,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.fhchatroom.Injection
 import com.example.fhchatroom.data.User
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -42,6 +41,25 @@ class ProfileViewModel : ViewModel() {
             }
     }
 
+    // Simplified method to update profile photo with a URL
+    fun updateProfilePhotoUrl(photoUrl: String, onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val email = auth.currentUser?.email ?: return@launch
+
+                firestore.collection("users")
+                    .document(email)
+                    .update("profilePhotoUrl", photoUrl)
+                    .await()
+
+                onComplete(true)
+            } catch (e: Exception) {
+                onComplete(false)
+            }
+        }
+    }
+
+    // Upload photo from URI (for actual photo files if available)
     fun uploadProfilePhoto(uri: Uri, onComplete: (Boolean) -> Unit) {
         viewModelScope.launch {
             try {
@@ -59,9 +77,9 @@ class ProfileViewModel : ViewModel() {
                 uploadTask.await()
                 val downloadUrl = storageRef.downloadUrl.await().toString()
 
-                // Delete old photo if exists
+                // Delete old photo if exists and is from Firebase Storage
                 _currentUser.value?.profilePhotoUrl?.let { oldUrl ->
-                    if (oldUrl.isNotEmpty()) {
+                    if (oldUrl.contains("firebasestorage.googleapis.com")) {
                         try {
                             storage.getReferenceFromUrl(oldUrl).delete().await()
                         } catch (e: Exception) {
@@ -84,6 +102,7 @@ class ProfileViewModel : ViewModel() {
         }
     }
 
+    // Upload photo from bitmap (camera)
     fun uploadProfilePhotoBitmap(bitmap: Bitmap, onComplete: (Boolean) -> Unit) {
         viewModelScope.launch {
             try {
@@ -105,9 +124,9 @@ class ProfileViewModel : ViewModel() {
                 uploadTask.await()
                 val downloadUrl = storageRef.downloadUrl.await().toString()
 
-                // Delete old photo if exists
+                // Delete old photo if exists and is from Firebase Storage
                 _currentUser.value?.profilePhotoUrl?.let { oldUrl ->
-                    if (oldUrl.isNotEmpty()) {
+                    if (oldUrl.contains("firebasestorage.googleapis.com")) {
                         try {
                             storage.getReferenceFromUrl(oldUrl).delete().await()
                         } catch (e: Exception) {
@@ -135,10 +154,14 @@ class ProfileViewModel : ViewModel() {
             try {
                 val email = auth.currentUser?.email ?: return@launch
 
-                // Delete photo from storage
+                // Delete photo from storage if it's from Firebase Storage
                 _currentUser.value?.profilePhotoUrl?.let { url ->
-                    if (url.isNotEmpty()) {
-                        storage.getReferenceFromUrl(url).delete().await()
+                    if (url.contains("firebasestorage.googleapis.com")) {
+                        try {
+                            storage.getReferenceFromUrl(url).delete().await()
+                        } catch (e: Exception) {
+                            // Ignore if deletion fails
+                        }
                     }
                 }
 

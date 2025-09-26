@@ -10,19 +10,18 @@ import androidx.lifecycle.viewModelScope
 import com.example.fhchatroom.Injection
 import com.example.fhchatroom.data.Message
 import com.example.fhchatroom.data.MessageRepository
+import com.example.fhchatroom.data.MessageType
 import com.example.fhchatroom.data.Result.Error
 import com.example.fhchatroom.data.Result.Success
 import com.example.fhchatroom.data.User
 import com.example.fhchatroom.data.UserRepository
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.UUID
-import com.example.fhchatroom.data.MessageType
 
 class MessageViewModel : ViewModel() {
 
@@ -61,23 +60,40 @@ class MessageViewModel : ViewModel() {
     }
 
     fun sendMessage(text: String, replyToMessage: Message? = null) {
-        if (_currentUser.value != null) {
-            val message = Message(
-                senderFirstName = _currentUser.value!!.firstName,
-                senderId = _currentUser.value!!.email,
-                text = text,
-                type = MessageType.TEXT,
-                replyToMessageId = replyToMessage?.id,
-                replyToMessageText = when(replyToMessage?.type) {
+        if (_currentUser.value != null && _roomId.value != null) {
+            val messageData = hashMapOf(
+                "senderFirstName" to _currentUser.value!!.firstName,
+                "senderId" to _currentUser.value!!.email,
+                "text" to text,
+                "timestamp" to System.currentTimeMillis(),
+                "type" to MessageType.TEXT.name,
+                "reactions" to emptyMap<String, String>(),
+                "deletedFor" to emptyList<String>()
+            )
+
+            // Add reply fields if replying
+            replyToMessage?.let {
+                messageData["replyToMessageId"] = it.id ?: ""
+                messageData["replyToMessageText"] = when(it.type) {
                     MessageType.IMAGE -> "📷 Photo"
                     MessageType.VOICE -> "🎤 Voice message"
-                    else -> replyToMessage?.text
-                },
-                replyToSenderName = replyToMessage?.senderFirstName
-            )
+                    else -> it.text.take(100)
+                }
+                messageData["replyToSenderName"] = it.senderFirstName
+            }
+
             viewModelScope.launch {
-                val result = messageRepository.sendMessage(_roomId.value.toString(), message)
-                _sendResult.value = result
+                try {
+                    firestore.collection("rooms")
+                        .document(_roomId.value!!)
+                        .collection("messages")
+                        .add(messageData)
+                        .await()
+                    _sendResult.value = Success(Unit)
+                } catch (e: Exception) {
+                    _sendResult.value = Error(e)
+                    Log.e("MessageViewModel", "Failed to send message", e)
+                }
             }
         }
     }
@@ -99,16 +115,24 @@ class MessageViewModel : ViewModel() {
                 uploadTask.await()
                 val downloadUrl = storageRef.downloadUrl.await().toString()
 
-                val message = Message(
-                    senderFirstName = _currentUser.value!!.firstName,
-                    senderId = _currentUser.value!!.email,
-                    text = "Photo",
-                    type = MessageType.IMAGE,
-                    mediaUrl = downloadUrl
+                val messageData = hashMapOf(
+                    "senderFirstName" to _currentUser.value!!.firstName,
+                    "senderId" to _currentUser.value!!.email,
+                    "text" to "Photo",
+                    "timestamp" to System.currentTimeMillis(),
+                    "type" to MessageType.IMAGE.name,
+                    "mediaUrl" to downloadUrl,
+                    "reactions" to emptyMap<String, String>(),
+                    "deletedFor" to emptyList<String>()
                 )
 
-                val result = messageRepository.sendMessage(roomId, message)
-                _sendResult.value = result
+                firestore.collection("rooms")
+                    .document(roomId)
+                    .collection("messages")
+                    .add(messageData)
+                    .await()
+
+                _sendResult.value = Success(Unit)
                 _uploadProgress.value = 100f
             } catch (e: Exception) {
                 _sendResult.value = Error(e)
@@ -138,16 +162,24 @@ class MessageViewModel : ViewModel() {
                 uploadTask.await()
                 val downloadUrl = storageRef.downloadUrl.await().toString()
 
-                val message = Message(
-                    senderFirstName = _currentUser.value!!.firstName,
-                    senderId = _currentUser.value!!.email,
-                    text = "Photo",
-                    type = MessageType.IMAGE,
-                    mediaUrl = downloadUrl
+                val messageData = hashMapOf(
+                    "senderFirstName" to _currentUser.value!!.firstName,
+                    "senderId" to _currentUser.value!!.email,
+                    "text" to "Photo",
+                    "timestamp" to System.currentTimeMillis(),
+                    "type" to MessageType.IMAGE.name,
+                    "mediaUrl" to downloadUrl,
+                    "reactions" to emptyMap<String, String>(),
+                    "deletedFor" to emptyList<String>()
                 )
 
-                val result = messageRepository.sendMessage(roomId, message)
-                _sendResult.value = result
+                firestore.collection("rooms")
+                    .document(roomId)
+                    .collection("messages")
+                    .add(messageData)
+                    .await()
+
+                _sendResult.value = Success(Unit)
                 _uploadProgress.value = 100f
             } catch (e: Exception) {
                 _sendResult.value = Error(e)
@@ -175,17 +207,25 @@ class MessageViewModel : ViewModel() {
 
                 audioFile.delete()
 
-                val message = Message(
-                    senderFirstName = _currentUser.value!!.firstName,
-                    senderId = _currentUser.value!!.email,
-                    text = "Voice message",
-                    type = MessageType.VOICE,
-                    mediaUrl = downloadUrl,
-                    mediaDuration = duration
+                val messageData = hashMapOf(
+                    "senderFirstName" to _currentUser.value!!.firstName,
+                    "senderId" to _currentUser.value!!.email,
+                    "text" to "Voice message",
+                    "timestamp" to System.currentTimeMillis(),
+                    "type" to MessageType.VOICE.name,
+                    "mediaUrl" to downloadUrl,
+                    "mediaDuration" to duration,
+                    "reactions" to emptyMap<String, String>(),
+                    "deletedFor" to emptyList<String>()
                 )
 
-                val result = messageRepository.sendMessage(roomId, message)
-                _sendResult.value = result
+                firestore.collection("rooms")
+                    .document(roomId)
+                    .collection("messages")
+                    .add(messageData)
+                    .await()
+
+                _sendResult.value = Success(Unit)
                 _uploadProgress.value = 100f
             } catch (e: Exception) {
                 _sendResult.value = Error(e)
@@ -199,32 +239,66 @@ class MessageViewModel : ViewModel() {
             try {
                 val userEmail = _currentUser.value?.email ?: return@launch
 
-                // Get current message to check existing reactions
-                val messageDoc = firestore.collection("rooms")
+                Log.d("MessageViewModel", "Adding reaction: $emoji to message: $messageId by user: $userEmail")
+
+                // Get current message document
+                val messageRef = firestore.collection("rooms")
                     .document(roomId)
                     .collection("messages")
                     .document(messageId)
-                    .get()
-                    .await()
 
-                val currentReactions = messageDoc.get("reactions") as? Map<String, String> ?: emptyMap()
+                firestore.runTransaction { transaction ->
+                    val messageSnapshot = transaction.get(messageRef)
 
-                // Toggle reaction - remove if already exists with same emoji, otherwise add/update
-                val updatedReactions = if (currentReactions[userEmail] == emoji) {
-                    currentReactions - userEmail
-                } else {
-                    currentReactions + (userEmail to emoji)
-                }
+                    @Suppress("UNCHECKED_CAST")
+                    val currentReactions = (messageSnapshot.get("reactions") as? Map<String, String>) ?: emptyMap()
 
-                firestore.collection("rooms")
-                    .document(roomId)
-                    .collection("messages")
-                    .document(messageId)
-                    .update("reactions", updatedReactions)
-                    .await()
+                    // Toggle reaction - remove if already exists with same emoji, otherwise add/update
+                    val updatedReactions = if (currentReactions[userEmail] == emoji) {
+                        // Remove reaction
+                        currentReactions.toMutableMap().apply { remove(userEmail) }
+                    } else {
+                        // Add or update reaction
+                        currentReactions.toMutableMap().apply { put(userEmail, emoji) }
+                    }
+
+                    // Update the document
+                    transaction.update(messageRef, "reactions", updatedReactions)
+                }.await()
+
+                Log.d("MessageViewModel", "Reaction updated successfully")
 
             } catch (e: Exception) {
                 Log.e("MessageViewModel", "Failed to add reaction", e)
+            }
+        }
+    }
+
+    fun forwardMessage(message: Message, toRoomId: String) {
+        viewModelScope.launch {
+            try {
+                val forwardData = hashMapOf(
+                    "senderFirstName" to _currentUser.value!!.firstName,
+                    "senderId" to _currentUser.value!!.email,
+                    "text" to "Forwarded: ${message.text}",
+                    "timestamp" to System.currentTimeMillis(),
+                    "type" to message.type.name,
+                    "reactions" to emptyMap<String, String>(),
+                    "deletedFor" to emptyList<String>()
+                )
+
+                // Include media if present
+                message.mediaUrl?.let { forwardData["mediaUrl"] = it }
+                message.mediaDuration?.let { forwardData["mediaDuration"] = it }
+
+                firestore.collection("rooms")
+                    .document(toRoomId)
+                    .collection("messages")
+                    .add(forwardData)
+                    .await()
+
+            } catch (e: Exception) {
+                Log.e("MessageViewModel", "Failed to forward message", e)
             }
         }
     }
