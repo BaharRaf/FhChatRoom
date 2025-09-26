@@ -277,25 +277,42 @@ class MessageViewModel : ViewModel() {
     fun forwardMessage(message: Message, toRoomId: String) {
         viewModelScope.launch {
             try {
+                val currentUser = _currentUser.value ?: return@launch
+
                 val forwardData = hashMapOf(
-                    "senderFirstName" to _currentUser.value!!.firstName,
-                    "senderId" to _currentUser.value!!.email,
-                    "text" to "Forwarded: ${message.text}",
+                    "senderFirstName" to currentUser.firstName,
+                    "senderId" to currentUser.email,
                     "timestamp" to System.currentTimeMillis(),
-                    "type" to message.type.name,
                     "reactions" to emptyMap<String, String>(),
                     "deletedFor" to emptyList<String>()
                 )
 
-                // Include media if present
-                message.mediaUrl?.let { forwardData["mediaUrl"] = it }
-                message.mediaDuration?.let { forwardData["mediaDuration"] = it }
+                // Handle different message types
+                when (message.type) {
+                    MessageType.TEXT -> {
+                        forwardData["text"] = "Forwarded from ${message.senderFirstName}: ${message.text}"
+                        forwardData["type"] = MessageType.TEXT.name
+                    }
+                    MessageType.IMAGE -> {
+                        forwardData["text"] = "Forwarded photo from ${message.senderFirstName}"
+                        forwardData["type"] = MessageType.IMAGE.name
+                        message.mediaUrl?.let { forwardData["mediaUrl"] = it }
+                    }
+                    MessageType.VOICE -> {
+                        forwardData["text"] = "Forwarded voice message from ${message.senderFirstName}"
+                        forwardData["type"] = MessageType.VOICE.name
+                        message.mediaUrl?.let { forwardData["mediaUrl"] = it }
+                        message.mediaDuration?.let { forwardData["mediaDuration"] = it }
+                    }
+                }
 
                 firestore.collection("rooms")
                     .document(toRoomId)
                     .collection("messages")
                     .add(forwardData)
                     .await()
+
+                Log.d("MessageViewModel", "Message forwarded successfully to room: $toRoomId")
 
             } catch (e: Exception) {
                 Log.e("MessageViewModel", "Failed to forward message", e)
