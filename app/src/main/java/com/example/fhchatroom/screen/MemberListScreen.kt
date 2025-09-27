@@ -75,7 +75,8 @@ fun MemberListScreen(
     roomId: String,
     onBack: () -> Unit,
     onLeaveRoom: () -> Unit = {},
-    friendsViewModel: FriendsViewModel = viewModel()
+    friendsViewModel: FriendsViewModel = viewModel(),
+    onStartDirectMessage: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     var members by remember { mutableStateOf(listOf<User>()) }
@@ -93,7 +94,7 @@ fun MemberListScreen(
     // Handle operation results
     LaunchedEffect(operationResult) {
         when (operationResult) {
-            is com.example.fhchatroom.data.Result.Success -> {
+            is Result.Success -> {
                 Toast.makeText(
                     context,
                     (operationResult as Result.Success<String>).data,
@@ -101,7 +102,7 @@ fun MemberListScreen(
                 ).show()
                 friendsViewModel.clearOperationResult()
             }
-            is com.example.fhchatroom.data.Result.Error -> {
+            is Result.Error -> {
                 Toast.makeText(
                     context,
                     (operationResult as Result.Error).exception.message,
@@ -125,19 +126,31 @@ fun MemberListScreen(
                 if (snap != null && snap.exists()) {
                     val room = snap.toObject(Room::class.java)
                     val emails = room?.members ?: emptyList()
+
                     // clear old listeners
                     activeListeners.forEach { (email, listener) ->
                         val enc = email.replace(".", ",")
                         database.getReference("status/$enc").removeEventListener(listener)
                     }
                     activeListeners.clear()
+
                     if (emails.isNotEmpty()) {
-                        // fetch user profiles
-                        firestore.collection("users").whereIn("email", emails).get()
-                            .addOnSuccessListener { docs ->
-                                val users = docs.documents.mapNotNull { it.toObject(User::class.java) }
+                        // SAFELY FETCH USERS IN CHUNKS OF ≤ 10
+                        coroutineScope.launch {
+                            try {
+                                val snapshots = emails.chunked(10).map { chunk ->
+                                    firestore.collection("users")
+                                        .whereIn("email", chunk)
+                                        .get()
+                                        .await()
+                                }
+                                val users = snapshots
+                                    .flatMap { it.documents }
+                                    .mapNotNull { it.toObject(User::class.java) }
+
                                 // initialize all as offline
                                 members = users.map { it.copy(isOnline = false) }
+
                                 // attach RTDB listeners
                                 users.forEach { user ->
                                     val enc = user.email.replace(".", ",")
@@ -152,21 +165,17 @@ fun MemberListScreen(
                                         }
 
                                         override fun onCancelled(e: DatabaseError) {
-                                            Log.e(
-                                                TAG,
-                                                "Status listener cancelled for ${user.email}",
-                                                e.toException()
-                                            )
+                                            Log.e(TAG, "Status listener cancelled for ${user.email}", e.toException())
                                         }
                                     }
                                     ref.addValueEventListener(listener)
                                     activeListeners[user.email] = listener
                                 }
-                            }
-                            .addOnFailureListener { e ->
+                            } catch (e: Exception) {
                                 Log.e(TAG, "Fetch users failed", e)
                                 Toast.makeText(context, "Failed to load members", Toast.LENGTH_SHORT).show()
                             }
+                        }
                     } else {
                         members = emptyList()
                     }
@@ -213,7 +222,8 @@ fun MemberListScreen(
                     onAddFriend = { targetUser ->
                         friendsViewModel.sendFriendRequest(targetUser)
                     },
-                    friendsViewModel = friendsViewModel
+                    friendsViewModel = friendsViewModel,
+                    onStartDirectMessage = onStartDirectMessage
                 )
             }
         }
@@ -253,9 +263,12 @@ fun MemberItem(
     user: User,
     isCurrentUser: Boolean,
     onAddFriend: (User) -> Unit,
-    friendsViewModel: FriendsViewModel
+    friendsViewModel: FriendsViewModel,
+    onStartDirectMessage: (String) -> Unit
 ) {
     var friendshipStatus by remember { mutableStateOf<FriendshipStatus?>(null) }
+    // Room VM used to open/create a 1:1 room
+    val rooms = androidx.lifecycle.viewmodel.compose.viewModel<com.example.fhchatroom.viewmodel.RoomViewModel>()
 
     // Get friendship status for non-current users
     LaunchedEffect(user.email) {
@@ -342,11 +355,7 @@ fun MemberItem(
                         )
                     }
                 }
-                Text(
-                    text = user.email,
-                    fontSize = 14.sp,
-                    color = Color.Gray
-                )
+
                 Text(
                     text = if (user.isOnline) "Online" else "Offline",
                     fontSize = 12.sp,
@@ -354,92 +363,104 @@ fun MemberItem(
                 )
             }
 
-            // Friend action button (only for other users)
             if (!isCurrentUser) {
-                when (friendshipStatus) {
-                    FriendshipStatus.FRIENDS -> {
-                        AssistChip(
-                            onClick = { },
-                            label = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.Check,
-                                        contentDescription = "Friends",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Friends", fontSize = 12.sp)
-                                }
-                            },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = Color.Green.copy(alpha = 0.2f),
-                                labelColor = Color.Green
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    when (friendshipStatus) {
+                        FriendshipStatus.FRIENDS -> {
+                            AssistChip(
+                                onClick = { },
+                                label = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.Check,
+                                            contentDescription = "Friends",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Friends", fontSize = 12.sp)
+                                    }
+                                },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = Color.Green.copy(alpha = 0.2f),
+                                    labelColor = Color.Green
+                                )
                             )
-                        )
-                    }
-                    FriendshipStatus.REQUEST_SENT -> {
-                        AssistChip(
-                            onClick = { },
-                            label = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.Schedule,
-                                        contentDescription = "Request Sent",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Sent", fontSize = 12.sp)
-                                }
-                            },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = Color(0xFFFFA500).copy(alpha = 0.2f),
-                                labelColor = Color(0xFFFFA500)
+                        }
+                        FriendshipStatus.REQUEST_SENT -> {
+                            AssistChip(
+                                onClick = { },
+                                label = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.Schedule,
+                                            contentDescription = "Request Sent",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Sent", fontSize = 12.sp)
+                                    }
+                                },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = Color(0xFFFFA500).copy(alpha = 0.2f),
+                                    labelColor = Color(0xFFFFA500)
+                                )
                             )
-                        )
-                    }
-                    FriendshipStatus.REQUEST_RECEIVED -> {
-                        AssistChip(
-                            onClick = { },
-                            label = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.Notifications,
-                                        contentDescription = "Respond",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Respond", fontSize = 12.sp)
-                                }
-                            },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                                labelColor = MaterialTheme.colorScheme.primary
+                        }
+                        FriendshipStatus.REQUEST_RECEIVED -> {
+                            AssistChip(
+                                onClick = { },
+                                label = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.Notifications,
+                                            contentDescription = "Respond",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Respond", fontSize = 12.sp)
+                                    }
+                                },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                    labelColor = MaterialTheme.colorScheme.primary
+                                )
                             )
-                        )
-                    }
-                    FriendshipStatus.NOT_FRIENDS -> {
-                        Button(
-                            onClick = { onAddFriend(user) },
-                            modifier = Modifier.height(36.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
+                        }
+                        FriendshipStatus.NOT_FRIENDS -> {
+                            Button(
+                                onClick = { onAddFriend(user) },
+                                modifier = Modifier.height(36.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                )
+                            ) {
+                                Icon(
+                                    Icons.Default.PersonAdd,
+                                    contentDescription = "Add Friend",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Add Friend", fontSize = 12.sp)
+                            }
+                        }
+                        null -> {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp
                             )
-                        ) {
-                            Icon(
-                                Icons.Default.PersonAdd,
-                                contentDescription = "Add Friend",
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Add Friend", fontSize = 12.sp)
                         }
                     }
-                    null -> {
-                        // Loading state
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp
-                        )
+
+                    // Message button UNDER the friend button/chip
+                    OutlinedButton(onClick = {
+                        rooms.openOrCreateDirectRoom(user.email) { dmRoomId ->
+                            onStartDirectMessage(dmRoomId)
+                        }
+                    }) {
+                        Text("Message", fontSize = 12.sp)
                     }
                 }
             }
