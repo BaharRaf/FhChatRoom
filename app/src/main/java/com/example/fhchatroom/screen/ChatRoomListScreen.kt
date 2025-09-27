@@ -3,6 +3,8 @@ package com.example.fhchatroom.screen
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,9 +16,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
@@ -25,6 +26,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -34,6 +36,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
@@ -45,9 +48,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.fhchatroom.Injection
 import com.example.fhchatroom.data.Room
+import com.example.fhchatroom.data.User
 import com.example.fhchatroom.viewmodel.RoomViewModel
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.tasks.await
 
 enum class SortOption {
     NAME_ASC,
@@ -57,6 +63,7 @@ enum class SortOption {
     NEWEST_FIRST,
     OLDEST_FIRST
 }
+private enum class RoomTab { PUBLIC, PRIVATE }
 
 @Composable
 fun ChatRoomListScreen(
@@ -79,25 +86,14 @@ fun ChatRoomListScreen(
     var sortOption by remember { mutableStateOf(SortOption.NAME_ASC) }
     var showSortMenu by remember { mutableStateOf(false) }
 
-    // Filter rooms based on search query
-    val filteredRooms = rooms.filter { room ->
-        searchQuery.isEmpty() ||
-                room.name.contains(searchQuery, ignoreCase = true) ||
-                room.description.contains(searchQuery, ignoreCase = true)
-    }
+    // Private creation toggle (enabled)
+    var isPrivate by remember { mutableStateOf(false) }
+    var tab by remember { mutableStateOf(RoomTab.PUBLIC) }
 
-    // Sort rooms based on selected option
-    val sortedRooms = when (sortOption) {
-        SortOption.NAME_ASC -> filteredRooms.sortedBy { it.name.lowercase() }
-        SortOption.NAME_DESC -> filteredRooms.sortedByDescending { it.name.lowercase() }
-        SortOption.MEMBER_COUNT_ASC -> filteredRooms.sortedBy { it.members.size }
-        SortOption.MEMBER_COUNT_DESC -> filteredRooms.sortedByDescending { it.members.size }
-        SortOption.NEWEST_FIRST -> filteredRooms.sortedByDescending { it.lastMessageTimestamp }
-        SortOption.OLDEST_FIRST -> filteredRooms.sortedBy { it.lastMessageTimestamp }
-    }
+    val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // Include the top app bar with Logout and theme toggle.
+        // Top app bar
         ChatAppTopBar(
             onLogout = onLogout,
             onNavigateToProfile = onNavigateToProfile,
@@ -106,88 +102,55 @@ fun ChatRoomListScreen(
             onToggleTheme = onToggleTheme
         )
 
+        // Public/Private toggle
+        Spacer(modifier = Modifier.height(6.dp))
+        SegmentedButtons(tab) { tab = it }
+
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Search and Sort Controls
+        // Header (no counts)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Chat Rooms (${sortedRooms.size})",
+                text = "Chat Rooms",
                 fontWeight = FontWeight.Bold,
                 fontSize = 18.sp,
                 modifier = Modifier.weight(1f)
             )
 
             Row {
-                // Search Toggle Button
+                // Search toggle
                 IconButton(onClick = {
                     showSearchBar = !showSearchBar
                     if (!showSearchBar) searchQuery = ""
                 }) {
                     Icon(
-                        imageVector = if (showSearchBar) Icons.Default.Clear else Icons.Default.Search,
+                        imageVector = if (showSearchBar) Icons.Filled.Clear else Icons.Filled.Search,
                         contentDescription = if (showSearchBar) "Close Search" else "Search Rooms"
                     )
                 }
 
-                // Sort Button
+                // Sort
                 IconButton(onClick = { showSortMenu = true }) {
                     Icon(
-                        imageVector = Icons.Default.Sort,
+                        imageVector = Icons.Filled.Sort,
                         contentDescription = "Sort Rooms"
                     )
                 }
 
-                // Sort Dropdown Menu
                 DropdownMenu(
                     expanded = showSortMenu,
                     onDismissRequest = { showSortMenu = false }
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("Name (A-Z) ↑") },
-                        onClick = {
-                            sortOption = SortOption.NAME_ASC
-                            showSortMenu = false
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Name (Z-A) ↓") },
-                        onClick = {
-                            sortOption = SortOption.NAME_DESC
-                            showSortMenu = false
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Members (Low to High) ↑") },
-                        onClick = {
-                            sortOption = SortOption.MEMBER_COUNT_ASC
-                            showSortMenu = false
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Members (High to Low) ↓") },
-                        onClick = {
-                            sortOption = SortOption.MEMBER_COUNT_DESC
-                            showSortMenu = false
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Newest First") },
-                        onClick = {
-                            sortOption = SortOption.NEWEST_FIRST
-                            showSortMenu = false
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Oldest First") },
-                        onClick = {
-                            sortOption = SortOption.OLDEST_FIRST
-                            showSortMenu = false
-                        }
-                    )
+                    DropdownMenuItem(text = { Text("Name (A-Z) ↑") }, onClick = { sortOption = SortOption.NAME_ASC; showSortMenu = false })
+                    DropdownMenuItem(text = { Text("Name (Z-A) ↓") }, onClick = { sortOption = SortOption.NAME_DESC; showSortMenu = false })
+                    DropdownMenuItem(text = { Text("Members (Low to High) ↑") }, onClick = { sortOption = SortOption.MEMBER_COUNT_ASC; showSortMenu = false })
+                    DropdownMenuItem(text = { Text("Members (High to Low) ↓") }, onClick = { sortOption = SortOption.MEMBER_COUNT_DESC; showSortMenu = false })
+                    DropdownMenuItem(text = { Text("Newest First") }, onClick = { sortOption = SortOption.NEWEST_FIRST; showSortMenu = false })
+                    DropdownMenuItem(text = { Text("Oldest First") }, onClick = { sortOption = SortOption.OLDEST_FIRST; showSortMenu = false })
                 }
             }
         }
@@ -202,13 +165,11 @@ fun ChatRoomListScreen(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 label = { Text("Search rooms by name or description...") },
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = "Search")
-                },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                            Icon(Icons.Filled.Clear, contentDescription = "Clear search")
                         }
                     }
                 },
@@ -219,31 +180,36 @@ fun ChatRoomListScreen(
             )
         }
 
-        // Current sort indicator
-        if (sortOption != SortOption.NAME_ASC) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                )
-            ) {
-                Text(
-                    text = "Sorted by: ${getSortOptionLabel(sortOption)}",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    fontSize = 14.sp
-                )
-            }
+        // TAB FILTERING
+        // PUBLIC: only non-private rooms (excludes DMs and private groups)
+        // PRIVATE: all private rooms the user can access: DMs (isDirect) AND private groups (isPrivate)
+        val tabRooms = when (tab) {
+            RoomTab.PUBLIC -> rooms.filter { !it.isPrivate }
+            RoomTab.PRIVATE -> rooms.filter { it.isPrivate && currentUserEmail != null && (it.members.contains(currentUserEmail) || it.ownerEmail == currentUserEmail) }
+        }
+
+        // Apply search on the tab list
+        val filteredRooms = tabRooms.filter { room ->
+            searchQuery.isEmpty() ||
+                    room.name.contains(searchQuery, ignoreCase = true) ||
+                    room.description.contains(searchQuery, ignoreCase = true)
+        }
+
+        // Sort after filtering
+        val sortedRooms = when (sortOption) {
+            SortOption.NAME_ASC -> filteredRooms.sortedBy { it.name.lowercase() }
+            SortOption.NAME_DESC -> filteredRooms.sortedByDescending { it.name.lowercase() }
+            SortOption.MEMBER_COUNT_ASC -> filteredRooms.sortedBy { it.members.size }
+            SortOption.MEMBER_COUNT_DESC -> filteredRooms.sortedByDescending { it.members.size }
+            SortOption.NEWEST_FIRST -> filteredRooms.sortedByDescending { it.lastMessageTimestamp }
+            SortOption.OLDEST_FIRST -> filteredRooms.sortedBy { it.lastMessageTimestamp }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // List of available chat rooms with descriptions
-        val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email
-
+        // List
+        val currentUser = currentUserEmail
         if (sortedRooms.isEmpty()) {
-            // Empty state
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -267,12 +233,11 @@ fun ChatRoomListScreen(
             }
         } else {
             LazyColumn(modifier = Modifier.weight(1f)) {
-                items(sortedRooms) { room ->
-                    // Determine if user is already a member and if user is the room creator
-                    val isMember = currentUserEmail != null && room.members.contains(currentUserEmail)
-                    val isOwner = currentUserEmail != null && (
-                            room.ownerEmail == currentUserEmail ||
-                                    (room.ownerEmail.isBlank() && room.members.firstOrNull() == currentUserEmail)
+                items(sortedRooms, key = { it.id }) { room ->
+                    val isMember = currentUser != null && room.members.contains(currentUser)
+                    val isOwner = currentUser != null && (
+                            room.ownerEmail == currentUser ||
+                                    (room.ownerEmail.isBlank() && room.members.firstOrNull() == currentUser)
                             )
 
                     RoomItem(
@@ -281,15 +246,15 @@ fun ChatRoomListScreen(
                         isOwner = isOwner,
                         memberCount = room.members.size,
                         onDeleteClicked = {
-                            // Only allow creator to delete the room
-                            roomViewModel.deleteRoom(room.id)
+                            // Only allow delete for non-DM groups
+                            if (!room.isDirect) {
+                                roomViewModel.deleteRoom(room.id)
+                            }
                         },
                         onJoinClicked = {
-                            // If not a member yet, join the room first
                             if (!isMember) {
                                 roomViewModel.joinRoom(room.id)
                             }
-                            // Navigate to the chat screen for this room
                             onJoinClicked(room)
                         }
                     )
@@ -299,6 +264,7 @@ fun ChatRoomListScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Create Room (public or private based on checkbox)
         Button(
             onClick = { showDialog = true },
             modifier = Modifier.fillMaxWidth()
@@ -326,6 +292,13 @@ fun ChatRoomListScreen(
                             modifier = Modifier.fillMaxWidth().padding(8.dp),
                             maxLines = 3
                         )
+                        Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = isPrivate,
+                                onCheckedChange = { isPrivate = it }
+                            )
+                            Text("Private (visible only to you & invited)")
+                        }
                     }
                 },
                 confirmButton = {
@@ -335,23 +308,49 @@ fun ChatRoomListScreen(
                     ) {
                         Button(onClick = {
                             if (name.isNotBlank()) {
-                                roomViewModel.createRoom(name, description)
+                                roomViewModel.createRoom(name, description, isPrivate)
                                 name = ""
                                 description = ""
+                                isPrivate = false
                                 showDialog = false
                             }
-                        }) {
-                            Text("Add")
-                        }
+                        }) { Text("Add") }
+
                         Button(onClick = {
                             showDialog = false
                             name = ""
                             description = ""
-                        }) {
-                            Text("Cancel")
-                        }
+                            isPrivate = false
+                        }) { Text("Cancel") }
                     }
                 }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SegmentedButtons(current: RoomTab, onChange: (RoomTab) -> Unit) {
+    Row(
+        Modifier
+            .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+            .padding(4.dp)
+            .fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center
+    ) {
+        // Label kept as "Private"
+        listOf(RoomTab.PUBLIC to "Public", RoomTab.PRIVATE to "Private").forEach { (value, label) ->
+            val selected = current == value
+            val bg = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent
+            val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+            Text(
+                label,
+                color = fg,
+                modifier = Modifier
+                    .background(bg, CircleShape)
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .clickable { onChange(value) },
+                fontSize = 14.sp
             )
         }
     }
@@ -386,12 +385,54 @@ fun RoomItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val currentEmail = FirebaseAuth.getInstance().currentUser?.email
+                    val dmOther = room.members.firstOrNull { it != currentEmail } ?: room.members.firstOrNull()
+
+                    // 🔹 Title: for DMs, show other user's name (fallback to email), else room.name
+                    var titleText by remember { mutableStateOf(room.name) }
+                    LaunchedEffect(room.id, dmOther, room.isDirect) {
+                        if (room.isDirect && dmOther != null) {
+                            try {
+                                val firestore = Injection.instance()
+                                val qs = firestore.collection("users")
+                                    .whereEqualTo("email", dmOther)
+                                    .limit(1)
+                                    .get()
+                                    .await()
+                                val user = qs.documents.firstOrNull()?.toObject(User::class.java)
+                                val full = listOfNotNull(user?.firstName?.trim(), user?.lastName?.trim())
+                                    .joinToString(" ")
+                                    .trim()
+                                titleText = if (full.isNotEmpty()) full else dmOther
+                            } catch (_: Exception) {
+                                titleText = dmOther ?: room.name
+                            }
+                        } else {
+                            titleText = room.name
+                        }
+                    }
+
                     Text(
-                        text = room.name,
+                        text = titleText,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium
                     )
-                    if (isMember) {
+
+                    if (room.isDirect) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        // DM tag
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary)) {
+                            Text(
+                                text = "DM",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onTertiary
+                            )
+                        }
+                    }
+
+                    // 🔹 Remove "Joined" tag for DMs; keep for non-DM rooms
+                    if (isMember && !room.isDirect) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Card(
                             colors = CardDefaults.cardColors(
@@ -408,7 +449,7 @@ fun RoomItem(
                     }
                 }
 
-                // Last message preview
+                // Last message preview / description
                 if (room.lastMessage.isNotEmpty()) {
                     Row(
                         modifier = Modifier.padding(top = 4.dp),
@@ -437,7 +478,7 @@ fun RoomItem(
                             )
                         }
                     }
-                } else if (room.description.isNotEmpty()) {
+                } else if (room.description.isNotEmpty() && !room.isDirect) {
                     Text(
                         text = room.description,
                         fontSize = 14.sp,
@@ -448,18 +489,27 @@ fun RoomItem(
                     )
                 }
 
-                Text(
-                    text = "$memberCount ${if (memberCount == 1) "member" else "members"}",
-                    fontSize = 12.sp,
-                    color = Color.Gray,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
+                if (!room.isDirect) {
+                    Text(
+                        text = "$memberCount ${if (memberCount == 1) "member" else "members"}",
+                        fontSize = 12.sp,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                } else {
+                    Text(
+                        text = "2 members",
+                        fontSize = 12.sp,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = { onJoinClicked(room) }) {
                     Text(if (isMember) "Enter" else "Join")
                 }
-                if (isOwner) {
+                if (isOwner && !room.isDirect) {
                     Spacer(modifier = Modifier.width(8.dp))
                     IconButton(onClick = { onDeleteClicked(room) }) {
                         Icon(imageVector = Icons.Filled.Delete, contentDescription = "Delete Room")
@@ -476,10 +526,10 @@ fun formatMessageTime(timestamp: Long): String {
     val diff = now - timestamp
 
     return when {
-        diff < 60_000 -> "now" // Less than 1 minute
-        diff < 3_600_000 -> "${diff / 60_000}m" // Less than 1 hour
-        diff < 86_400_000 -> "${diff / 3_600_000}h" // Less than 24 hours
-        diff < 604_800_000 -> "${diff / 86_400_000}d" // Less than 7 days
+        diff < 60_000 -> "now"
+        diff < 3_600_000 -> "${diff / 60_000}m"
+        diff < 86_400_000 -> "${diff / 3_600_000}h"
+        diff < 604_800_000 -> "${diff / 86_400_000}d"
         else -> {
             val date = java.util.Date(timestamp)
             val format = java.text.SimpleDateFormat("MMM dd", java.util.Locale.getDefault())
