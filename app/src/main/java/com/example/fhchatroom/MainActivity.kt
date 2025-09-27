@@ -178,9 +178,6 @@ fun NavigationGraph(
                     navController.navigate(Screen.ProfileScreen.route)
                 },
                 onNavigateToFriends = {
-                    // NOTE: this navigates to the Friends screen route itself (no roomId).
-                    // If your Friends screen requires a roomId, navigate with one like:
-                    // navController.navigate("${Screen.FriendsScreen.route}/<roomId>")
                     navController.navigate(Screen.FriendsScreen.route)
                 },
                 isDarkTheme = isDarkTheme,
@@ -210,6 +207,9 @@ fun NavigationGraph(
                 onBack = { navController.popBackStack() },
                 onLeaveRoom = {
                     navController.popBackStack(Screen.ChatRoomsScreen.route, inclusive = false)
+                },
+                onStartDirectMessage = { dmRoomId ->
+                    navController.navigate("${Screen.ChatScreen.route}/$dmRoomId")
                 }
             )
         }
@@ -223,17 +223,25 @@ fun NavigationGraph(
             )
         }
 
-        // Friends Screen — expects a roomId in the route
+        composable(Screen.FriendsScreen.route) {
+            FriendsScreen(
+                onBack = { navController.popBackStack() },
+                onStartDirectMessage = { dmRoomId ->
+                    navController.navigate("${Screen.ChatScreen.route}/$dmRoomId")
+                }
+            )
+        }
+        // (Kept for backward-compat if anything still navigates with a roomId)
         composable(
             route = Screen.FriendsScreen.route + "/{roomId}",
             arguments = listOf(navArgument("roomId") { type = NavType.StringType })
         ) { backStackEntry ->
-            val roomId = backStackEntry.arguments?.getString("roomId")
-                ?: return@composable
+            val roomId = backStackEntry.arguments?.getString("roomId") ?: return@composable
             FriendsScreen(
                 roomId = roomId,
                 onBack = { navController.popBackStack() }
             )
         }
     }
+
 }

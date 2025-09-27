@@ -24,7 +24,7 @@ fun ChatAppTopBar(
     onNavigateToProfile: () -> Unit,
     onNavigateToFriends: () -> Unit,
     isDarkTheme: Boolean,
-    onToggleTheme: () -> Unit
+    onToggleTheme: () -> Unit,
 ) {
     TopAppBar(
         title = { Text("Chat Rooms") },
