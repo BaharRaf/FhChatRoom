@@ -1,8 +1,5 @@
 package com.example.fhchatroom.screen
 
-import android.util.Log
-import android.widget.Toast
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,253 +10,130 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.rememberAsyncImagePainter
 import com.example.fhchatroom.Injection
 import com.example.fhchatroom.data.FriendshipStatus
-import com.example.fhchatroom.data.Result
-import com.example.fhchatroom.data.Room
 import com.example.fhchatroom.data.User
 import com.example.fhchatroom.viewmodel.FriendsViewModel
+import com.example.fhchatroom.viewmodel.RoomViewModel
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ListenerRegistration
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RoomMemberListScreen(
-    roomId: String,
-    onBack: () -> Unit,
-    onLeaveRoom: () -> Unit = {},
-    friendsViewModel: FriendsViewModel = viewModel()
+fun FriendsScreen(
+    onBack: () -> Unit = {},
+    onStartDirectMessage: (String) -> Unit
 ) {
-    val context = LocalContext.current
-    var members by remember { mutableStateOf(listOf<User>()) }
-    val coroutineScope = rememberCoroutineScope()
     val firestore = Injection.instance()
-    val database = FirebaseDatabase.getInstance()
-    val activeListeners = remember { mutableMapOf<String, ValueEventListener>() }
-    var roomListener: ListenerRegistration? by remember { mutableStateOf(null) }
-    val TAG = "MemberListScreen"
-    val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email
+    val current = FirebaseAuth.getInstance().currentUser?.email
+    var users by remember { mutableStateOf(listOf<User>()) }
+    var reg: ListenerRegistration? by remember { mutableStateOf(null) }
 
-    // Observe friends operation results
-    val operationResult by friendsViewModel.operationResult.observeAsState()
-
-    // Handle operation results
-    LaunchedEffect(operationResult) {
-        when (operationResult) {
-            is com.example.fhchatroom.data.Result.Success -> {
-                Toast.makeText(context, (operationResult as Result.Success<String>).data, Toast.LENGTH_SHORT).show()
-                friendsViewModel.clearOperationResult()
+    // Real-time users; only "signed up" (have an email that looks valid)
+    DisposableEffect(Unit) {
+        reg = firestore.collection("users")
+            .addSnapshotListener { snap, _ ->
+                users = snap?.documents
+                    ?.mapNotNull { it.toObject(User::class.java) }
+                    ?.filter { it.email.isNotBlank() && it.email.contains("@") }
+                    ?: emptyList()
             }
-            is com.example.fhchatroom.data.Result.Error -> {
-                Toast.makeText(context, (operationResult as Result.Error).exception.message, Toast.LENGTH_SHORT).show()
-                friendsViewModel.clearOperationResult()
-            }
-            else -> {}
-        }
+        onDispose { reg?.remove() }
     }
 
-    DisposableEffect(roomId) {
-        Log.d(TAG, "Start member listener for room $roomId")
-        roomListener = firestore.collection("rooms").document(roomId)
-            .addSnapshotListener { snap, err ->
-                if (err != null) {
-                    Log.e(TAG, "Room listen error", err)
-                    Toast.makeText(context, "Failed to load members", Toast.LENGTH_SHORT).show()
-                    return@addSnapshotListener
-                }
-                if (snap != null && snap.exists()) {
-                    val room = snap.toObject(Room::class.java)
-                    val emails = room?.members ?: emptyList()
-                    // clear old listeners
-                    activeListeners.forEach { (email, listener) ->
-                        val enc = email.replace(".", ",")
-                        database.getReference("status/$enc").removeEventListener(listener)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("People") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
                     }
-                    activeListeners.clear()
-                    if (emails.isNotEmpty()) {
-                        // fetch user profiles
-                        firestore.collection("users").whereIn("email", emails).get()
-                            .addOnSuccessListener { docs ->
-                                val users = docs.documents.mapNotNull { it.toObject(User::class.java) }
-                                // initialize all as offline
-                                members = users.map { it.copy(isOnline = false) }
-                                // attach RTDB listeners
-                                users.forEach { user ->
-                                    val enc = user.email.replace(".", ",")
-                                    val ref = database.getReference("status/$enc")
-                                    val listener = object: ValueEventListener {
-                                        override fun onDataChange(ds: DataSnapshot) {
-                                            val online = ds.getValue(Boolean::class.java) ?: false
-                                            members = members.map {
-                                                if (it.email == user.email) it.copy(isOnline = online)
-                                                else it
-                                            }
-                                        }
-                                        override fun onCancelled(e: DatabaseError) {
-                                            Log.e(TAG, "Status listener cancelled for ${user.email}", e.toException())
-                                        }
-                                    }
-                                    ref.addValueEventListener(listener)
-                                    activeListeners[user.email] = listener
-                                }
-                            }
-                            .addOnFailureListener { e ->
-                                Log.e(TAG, "Fetch users failed", e)
-                                Toast.makeText(context, "Failed to load members", Toast.LENGTH_SHORT).show()
-                            }
-                    } else {
-                        members = emptyList()
-                    }
-                } else {
-                    Toast.makeText(context, "Room not found", Toast.LENGTH_SHORT).show()
-                    onBack()
                 }
-            }
-        onDispose {
-            roomListener?.remove()
-            activeListeners.forEach { (email, listener) ->
-                val enc = email.replace(".", ",")
-                database.getReference("status/$enc").removeEventListener(listener)
-            }
-            activeListeners.clear()
+            )
         }
-    }
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Members", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-            Text("${members.size} member${if (members.size != 1) "s" else ""}",
-                fontSize = 14.sp, color = Color.Gray)
-        }
-
-        // Members list
+    ) { padding ->
+        // Scrollable people list
         LazyColumn(
-            modifier = Modifier.weight(1f).padding(top = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(members, key = { it.email }) { user ->
-                RoomMemberItem(
-                    user = user,
-                    isCurrentUser = user.email == currentUserEmail,
-                    onAddFriend = { targetUser ->
-                        friendsViewModel.sendFriendRequest(targetUser)
-                    },
-                    friendsViewModel = friendsViewModel
-                )
-            }
-        }
+            val filtered = users
+                .filter { it.email != current }
+                .sortedBy { (it.firstName + it.lastName + it.email).lowercase() }
 
-        // Action buttons
-        Row(
-            Modifier.fillMaxWidth().padding(top = 8.dp),
-            horizontalArrangement = Arrangement.End
-        ) {
-            OutlinedButton(onClick = {
-                coroutineScope.launch {
-                    val email = FirebaseAuth.getInstance().currentUser?.email
-                    if (email != null) {
-                        try {
-                            firestore.collection("rooms").document(roomId)
-                                .update("members", FieldValue.arrayRemove(email)).await()
-                            Toast.makeText(context, "Left room", Toast.LENGTH_SHORT).show()
-                            onLeaveRoom()
-                        } catch(e: Exception) {
-                            Log.e(TAG, "Leave failed", e)
-                            Toast.makeText(context, "Failed to leave", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                }
-            }, Modifier.padding(end = 8.dp)) {
-                Text("Leave Room")
-            }
-            Button(onClick = onBack) {
-                Text("Close")
+            items(filtered, key = { it.email }) { user ->
+                AllUsersItem(user = user, onStartDirectMessage = onStartDirectMessage)
             }
         }
     }
 }
 
+// Backwards-compat overload (if some old route still calls FriendsScreen(roomId,...))
 @Composable
-fun RoomMemberItem(
+fun FriendsScreen(roomId: String, onBack: () -> Unit) {
+    FriendsScreen(onBack = onBack, onStartDirectMessage = { /* no-op here */ })
+}
+
+@Composable
+private fun AllUsersItem(
     user: User,
-    isCurrentUser: Boolean,
-    onAddFriend: (User) -> Unit,
-    friendsViewModel: FriendsViewModel
+    onStartDirectMessage: (String) -> Unit,
+    friendsViewModel: FriendsViewModel = viewModel(),
+    rooms: RoomViewModel = viewModel()
 ) {
     var friendshipStatus by remember { mutableStateOf<FriendshipStatus?>(null) }
 
-    // Get friendship status for non-current users
     LaunchedEffect(user.email) {
-        if (!isCurrentUser) {
-            friendsViewModel.getFriendshipStatus(user.email) { status ->
-                friendshipStatus = status
-            }
+        friendsViewModel.getFriendshipStatus(user.email) { status ->
+            friendshipStatus = status
         }
     }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isCurrentUser)
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-            else
-                MaterialTheme.colorScheme.surface
-        )
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(1.dp)
     ) {
         Row(
             modifier = Modifier
@@ -267,91 +141,48 @@ fun RoomMemberItem(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Profile photo
-            Box {
-                if (user.profilePhotoUrl.isNotEmpty()) {
-                    Image(
-                        painter = rememberAsyncImagePainter(user.profilePhotoUrl),
-                        contentDescription = "Profile Photo",
-                        modifier = Modifier
-                            .size(50.dp)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(50.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "${user.firstName.firstOrNull() ?: ""}${user.lastName.firstOrNull() ?: ""}",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                }
-
-                // Online status indicator
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .clip(CircleShape)
-                        .background(if (user.isOnline) Color.Green else Color.Gray)
-                        .align(Alignment.BottomEnd)
+            // Avatar (initials)
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .height(40.dp)
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "${user.firstName.firstOrNull() ?: ""}${user.lastName.firstOrNull() ?: ""}",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // User info
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "${user.firstName} ${user.lastName}",
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 16.sp
-                    )
-                    if (isCurrentUser) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        AssistChip(
-                            onClick = { },
-                            label = { Text("You", fontSize = 12.sp) },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                labelColor = MaterialTheme.colorScheme.onPrimary
-                            ),
-                            modifier = Modifier.height(24.dp)
-                        )
-                    }
-                }
                 Text(
-                    text = user.email,
-                    fontSize = 14.sp,
-                    color = Color.Gray
+                    text = "${user.firstName} ${user.lastName}".trim(),
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 16.sp
                 )
                 Text(
-                    text = if (user.isOnline) "Online" else "Offline",
+                    text = user.email,
                     fontSize = 12.sp,
-                    color = if (user.isOnline) Color.Green else Color.Gray
+                    color = Color.Gray
                 )
             }
 
-            // Friend action button (only for other users)
-            if (!isCurrentUser) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 when (friendshipStatus) {
                     FriendshipStatus.FRIENDS -> {
                         AssistChip(
                             onClick = { },
                             label = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.Check,
-                                        contentDescription = "Friends",
-                                        modifier = Modifier.size(16.dp)
-                                    )
+                                    Icon(Icons.Filled.Check, contentDescription = null)
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text("Friends", fontSize = 12.sp)
                                 }
@@ -363,85 +194,34 @@ fun RoomMemberItem(
                         )
                     }
                     FriendshipStatus.REQUEST_SENT -> {
-                        AssistChip(
-                            onClick = { },
-                            label = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.Schedule,
-                                        contentDescription = "Request Sent",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Sent", fontSize = 12.sp)
-                                }
-                            },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = Color(0xFFFFA500).copy(alpha = 0.2f),
-                                labelColor = Color(0xFFFFA500)
-                            )
-                        )
+                        AssistChip(onClick = { }, label = { Text("Sent", fontSize = 12.sp) })
                     }
                     FriendshipStatus.REQUEST_RECEIVED -> {
-                        AssistChip(
-                            onClick = { },
-                            label = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.Notifications,
-                                        contentDescription = "Respond",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Respond", fontSize = 12.sp)
-                                }
-                            },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                                labelColor = MaterialTheme.colorScheme.primary
-                            )
-                        )
+                        AssistChip(onClick = { }, label = { Text("Respond", fontSize = 12.sp) })
                     }
-                    FriendshipStatus.NOT_FRIENDS -> {
+                    FriendshipStatus.NOT_FRIENDS, null -> {
                         Button(
-                            onClick = { onAddFriend(user) },
-                            modifier = Modifier.height(36.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            )
+                            onClick = { friendsViewModel.sendFriendRequest(user) },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
-                            Icon(
-                                Icons.Default.PersonAdd,
-                                contentDescription = "Add Friend",
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.Filled.PersonAdd, contentDescription = null)
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text("Add Friend", fontSize = 12.sp)
                         }
                     }
-                    null -> {
-                        // Loading state
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp
-                        )
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        // Create/open DM ONLY when user initiates it
+                        rooms.openOrCreateDirectRoom(user.email) { dmRoomId ->
+                            onStartDirectMessage(dmRoomId)
+                        }
                     }
+                ) {
+                    Text("Message", fontSize = 12.sp)
                 }
             }
         }
     }
-}
-@Composable
-fun FriendsScreen(
-    roomId: String,
-    onBack: () -> Unit,
-    onLeaveRoom: () -> Unit = {},
-    friendsViewModel: FriendsViewModel = viewModel()
-) {
-    RoomMemberListScreen(
-        roomId = roomId,
-        onBack = onBack,
-        onLeaveRoom = onLeaveRoom,
-        friendsViewModel = friendsViewModel
-    )
 }
