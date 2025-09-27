@@ -54,6 +54,11 @@ import com.example.fhchatroom.data.User
 import com.example.fhchatroom.viewmodel.RoomViewModel
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.tasks.await
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.lifecycle.viewmodel.compose.viewModel
+import android.widget.Toast
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.LocalContext
 
 enum class SortOption {
     NAME_ASC,
@@ -363,8 +368,13 @@ fun RoomItem(
     isOwner: Boolean = false,
     memberCount: Int = 0,
     onDeleteClicked: (Room) -> Unit = {},
-    onJoinClicked: (Room) -> Unit
+    onHideClicked: (Room) -> Unit = {},
+    onJoinClicked: (Room) -> Unit,
+    roomViewModel: RoomViewModel = viewModel()
 ) {
+    val context = LocalContext.current
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -388,7 +398,7 @@ fun RoomItem(
                     val currentEmail = FirebaseAuth.getInstance().currentUser?.email
                     val dmOther = room.members.firstOrNull { it != currentEmail } ?: room.members.firstOrNull()
 
-                    // 🔹 Title: for DMs, show other user's name (fallback to email), else room.name
+                    // Title: for DMs, show other user's name (fallback to email), else room.name
                     var titleText by remember { mutableStateOf(room.name) }
                     LaunchedEffect(room.id, dmOther, room.isDirect) {
                         if (room.isDirect && dmOther != null) {
@@ -429,9 +439,20 @@ fun RoomItem(
                                 color = MaterialTheme.colorScheme.onTertiary
                             )
                         }
+                    } else if (room.isPrivate) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        // Private tag for non-DM private rooms
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondary)) {
+                            Text(
+                                text = "Private",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSecondary
+                            )
+                        }
                     }
 
-                    // 🔹 Remove "Joined" tag for DMs; keep for non-DM rooms
+                    // Remove "Joined" tag for DMs; keep for non-DM rooms
                     if (isMember && !room.isDirect) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Card(
@@ -498,7 +519,7 @@ fun RoomItem(
                     )
                 } else {
                     Text(
-                        text = "2 members",
+                        text = "Direct Message",
                         fontSize = 12.sp,
                         color = Color.Gray,
                         modifier = Modifier.padding(top = 4.dp)
@@ -509,7 +530,20 @@ fun RoomItem(
                 OutlinedButton(onClick = { onJoinClicked(room) }) {
                     Text(if (isMember) "Enter" else "Join")
                 }
-                if (isOwner && !room.isDirect) {
+
+                // Show delete/hide button based on room type
+                if (room.isDirect) {
+                    // For DMs, show hide button
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(onClick = { showDeleteConfirmation = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.VisibilityOff,
+                            contentDescription = "Hide Chat",
+                            tint = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                } else if (isOwner && !room.isDirect) {
+                    // For regular rooms, show delete for owner
                     Spacer(modifier = Modifier.width(8.dp))
                     IconButton(onClick = { onDeleteClicked(room) }) {
                         Icon(imageVector = Icons.Filled.Delete, contentDescription = "Delete Room")
@@ -518,10 +552,42 @@ fun RoomItem(
             }
         }
     }
+
+    // Confirmation dialog for hiding DMs
+    if (showDeleteConfirmation && room.isDirect) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Hide Conversation") },
+            text = {
+                Text("This will hide the conversation from your chat list. You can still access it by messaging this person again. The other person will still see the conversation.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        roomViewModel.hideDM(room.id) { success ->
+                            if (success) {
+                                Toast.makeText(context, "Conversation hidden", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Failed to hide conversation", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        showDeleteConfirmation = false
+                    }
+                ) {
+                    Text("Hide")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 // Helper function to format timestamp for last message
-fun formatMessageTime(timestamp: Long): String {
+private fun formatMessageTime(timestamp: Long): String {
     val now = System.currentTimeMillis()
     val diff = now - timestamp
 
@@ -535,16 +601,5 @@ fun formatMessageTime(timestamp: Long): String {
             val format = java.text.SimpleDateFormat("MMM dd", java.util.Locale.getDefault())
             format.format(date)
         }
-    }
-}
-
-fun getSortOptionLabel(sortOption: SortOption): String {
-    return when (sortOption) {
-        SortOption.NAME_ASC -> "Name (A-Z)"
-        SortOption.NAME_DESC -> "Name (Z-A)"
-        SortOption.MEMBER_COUNT_ASC -> "Members (Low to High)"
-        SortOption.MEMBER_COUNT_DESC -> "Members (High to Low)"
-        SortOption.NEWEST_FIRST -> "Newest First"
-        SortOption.OLDEST_FIRST -> "Oldest First"
     }
 }
