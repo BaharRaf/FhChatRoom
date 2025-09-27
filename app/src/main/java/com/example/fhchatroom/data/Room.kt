@@ -12,5 +12,6 @@ data class Room(
     val lastMessageType: String = "TEXT",
     val createdAt: Long = System.currentTimeMillis(),
     val isPrivate: Boolean = false,
-    val isDirect: Boolean = false
+    val isDirect: Boolean = false,
+    val hiddenBy: List<String> = emptyList() // New field to track users who have hidden this room
 )
