@@ -9,5 +9,8 @@ data class Room(
     val lastMessage: String = "",
     val lastMessageSender: String = "",
     val lastMessageTimestamp: Long = 0L,
-    val lastMessageType: String = "TEXT" // TEXT, IMAGE, VOICE
+    val lastMessageType: String = "TEXT",
+    val createdAt: Long = System.currentTimeMillis(),
+    val isPrivate: Boolean = false,
+    val isDirect: Boolean = false
 )
