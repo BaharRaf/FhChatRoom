@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Person
@@ -47,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +66,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
 import com.example.fhchatroom.viewmodel.ProfileViewModel
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -83,6 +90,40 @@ fun ProfileScreen(
     var newLastName by remember { mutableStateOf("") }
     var showPhotoOptions by remember { mutableStateOf(false) }
     var showAvatarSelector by remember { mutableStateOf(false) }
+
+    // Real-time online status
+    var isOnline by remember { mutableStateOf(false) }
+    val database = FirebaseDatabase.getInstance()
+    val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email
+
+    // Listen to real-time online status from RTDB
+    DisposableEffect(currentUserEmail) {
+        var statusListener: ValueEventListener? = null
+
+        if (currentUserEmail != null) {
+            val encodedEmail = currentUserEmail.replace(".", ",")
+            val statusRef = database.getReference("status/$encodedEmail")
+
+            statusListener = object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    isOnline = snapshot.getValue(Boolean::class.java) ?: false
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                    // Handle error silently
+                }
+            }
+
+            statusRef.addValueEventListener(statusListener)
+        }
+
+        onDispose {
+            if (currentUserEmail != null && statusListener != null) {
+                val encodedEmail = currentUserEmail.replace(".", ",")
+                database.getReference("status/$encodedEmail").removeEventListener(statusListener)
+            }
+        }
+    }
 
     // Photo picker launcher
     val photoPickerLauncher = rememberLauncherForActivityResult(
@@ -210,6 +251,35 @@ fun ProfileScreen(
                             )
                         }
                     }
+
+                    // Online status indicator on profile photo
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = 8.dp, bottom = 8.dp)
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isOnline) Color.Green else Color.Gray,
+                                CircleShape
+                            )
+                            .padding(2.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                                .background(Color.White)
+                                .padding(2.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
+                                    .background(if (isOnline) Color.Green else Color.Gray)
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -221,7 +291,7 @@ fun ProfileScreen(
                     fontWeight = FontWeight.Bold
                 )
 
-                // Online Status
+                // Online Status with real-time update
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(top = 8.dp)
@@ -230,13 +300,14 @@ fun ProfileScreen(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(if (user.isOnline) Color.Green else Color.Gray)
+                            .background(if (isOnline) Color.Green else Color.Gray)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (user.isOnline) "Online" else "Offline",
+                        text = if (isOnline) "Online" else "Offline",
                         fontSize = 14.sp,
-                        color = Color.Gray
+                        color = if (isOnline) Color.Green else Color.Gray,
+                        fontWeight = if (isOnline) FontWeight.Medium else FontWeight.Normal
                     )
                 }
 
@@ -294,8 +365,8 @@ fun ProfileScreen(
                     ) {
                         StatItem(
                             icon = Icons.Default.Forum,
-                            label = "Rooms",
-                            value = "Active"
+                            label = "Status",
+                            value = if (isOnline) "Active" else "Away"
                         )
                         StatItem(
                             icon = Icons.Default.School,
@@ -320,14 +391,16 @@ fun ProfileScreen(
         }
     }
 
-    // Avatar selector dialog - Temporarily commented if SimpleAvatarSelector.kt is missing
-    /*
+    // Avatar selector dialog
     if (showAvatarSelector) {
         AvatarSelectorDialog(
             onAvatarSelected = { avatarUrl ->
+                isUploading = true
                 profileViewModel.updateProfilePhotoUrl(avatarUrl) { success ->
+                    isUploading = false
                     if (success) {
                         Toast.makeText(context, "Avatar updated", Toast.LENGTH_SHORT).show()
+                        showAvatarSelector = false
                     } else {
                         Toast.makeText(context, "Failed to update avatar", Toast.LENGTH_SHORT).show()
                     }
@@ -336,7 +409,6 @@ fun ProfileScreen(
             onDismiss = { showAvatarSelector = false }
         )
     }
-    */
 
     // Photo options dialog
     if (showPhotoOptions) {
@@ -345,7 +417,7 @@ fun ProfileScreen(
             title = { Text("Change Profile Photo") },
             text = {
                 Column {
-                    /* Avatar option - uncomment when SimpleAvatarSelector.kt is added
+                    // Avatar option
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -360,7 +432,7 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.width(16.dp))
                         Text("Choose Avatar")
                     }
-                    */
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -517,7 +589,8 @@ fun StatItem(
         Text(
             text = value,
             fontSize = 16.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            color = if (value == "Active") Color.Green else MaterialTheme.colorScheme.onSurface
         )
         Text(
             text = label,
