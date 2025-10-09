@@ -80,6 +80,8 @@ fun MemberListScreen(
 ) {
     val context = LocalContext.current
     var members by remember { mutableStateOf(listOf<User>()) }
+    var room by remember { mutableStateOf<Room?>(null) }
+    var showInviteDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val firestore = Injection.instance()
     val database = FirebaseDatabase.getInstance()
@@ -124,8 +126,9 @@ fun MemberListScreen(
                     return@addSnapshotListener
                 }
                 if (snap != null && snap.exists()) {
-                    val room = snap.toObject(Room::class.java)
-                    val emails = room?.members ?: emptyList()
+                    val fetchedRoom = snap.toObject(Room::class.java)
+                    room = fetchedRoom
+                    val emails = fetchedRoom?.members ?: emptyList()
 
                     // clear old listeners
                     activeListeners.forEach { (email, listener) ->
@@ -203,11 +206,41 @@ fun MemberListScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Members", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Column {
+                Text("Members", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                room?.let { r ->
+                    if (!r.isDirect && r.name.isNotEmpty()) {
+                        Text(
+                            r.name,
+                            fontSize = 14.sp,
+                            color = Color.Gray
+                        )
+                    }
+                }
+            }
             Text(
                 "${members.size} member${if (members.size != 1) "s" else ""}",
                 fontSize = 14.sp, color = Color.Gray
             )
+        }
+
+        // Add invite button for all groups (not DMs)
+        room?.let { r ->
+            if (!r.isDirect &&
+                (r.ownerEmail == currentUserEmail || r.members.contains(currentUserEmail))) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { showInviteDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Icon(Icons.Default.PersonAdd, contentDescription = "Invite")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Invite Members")
+                }
+            }
         }
 
         // Members list
@@ -219,6 +252,7 @@ fun MemberListScreen(
                 MemberItem(
                     user = user,
                     isCurrentUser = user.email == currentUserEmail,
+                    isOwner = room?.ownerEmail == user.email,
                     onAddFriend = { targetUser ->
                         friendsViewModel.sendFriendRequest(targetUser)
                     },
@@ -233,27 +267,42 @@ fun MemberListScreen(
             Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.End
         ) {
-            OutlinedButton(onClick = {
-                coroutineScope.launch {
-                    val email = FirebaseAuth.getInstance().currentUser?.email
-                    if (email != null) {
-                        try {
-                            firestore.collection("rooms").document(roomId)
-                                .update("members", FieldValue.arrayRemove(email)).await()
-                            Toast.makeText(context, "Left room", Toast.LENGTH_SHORT).show()
-                            onLeaveRoom()
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Leave failed", e)
-                            Toast.makeText(context, "Failed to leave", Toast.LENGTH_LONG).show()
+            // Don't show leave button for DMs
+            if (room?.isDirect != true) {
+                OutlinedButton(onClick = {
+                    coroutineScope.launch {
+                        val email = FirebaseAuth.getInstance().currentUser?.email
+                        if (email != null) {
+                            try {
+                                firestore.collection("rooms").document(roomId)
+                                    .update("members", FieldValue.arrayRemove(email)).await()
+                                Toast.makeText(context, "Left room", Toast.LENGTH_SHORT).show()
+                                onLeaveRoom()
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Leave failed", e)
+                                Toast.makeText(context, "Failed to leave", Toast.LENGTH_LONG).show()
+                            }
                         }
                     }
+                }, Modifier.padding(end = 8.dp)) {
+                    Text("Leave Room")
                 }
-            }, Modifier.padding(end = 8.dp)) {
-                Text("Leave Room")
             }
             Button(onClick = onBack) {
                 Text("Close")
             }
+        }
+    }
+
+    // Show invite dialog
+    if (showInviteDialog) {
+        room?.let { r ->
+            InviteToRoomDialog(
+                roomId = roomId,
+                roomName = r.name,
+                currentMembers = r.members,
+                onDismiss = { showInviteDialog = false }
+            )
         }
     }
 }
@@ -262,6 +311,7 @@ fun MemberListScreen(
 fun MemberItem(
     user: User,
     isCurrentUser: Boolean,
+    isOwner: Boolean = false,
     onAddFriend: (User) -> Unit,
     friendsViewModel: FriendsViewModel,
     onStartDirectMessage: (String) -> Unit
@@ -342,16 +392,28 @@ fun MemberItem(
                         fontWeight = FontWeight.Medium,
                         fontSize = 16.sp
                     )
+                    if (isOwner) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        AssistChip(
+                            onClick = { },
+                            label = { Text("Owner", fontSize = 11.sp) },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f),
+                                labelColor = MaterialTheme.colorScheme.tertiary
+                            ),
+                            modifier = Modifier.height(22.dp)
+                        )
+                    }
                     if (isCurrentUser) {
                         Spacer(modifier = Modifier.width(8.dp))
                         AssistChip(
                             onClick = { },
-                            label = { Text("You", fontSize = 12.sp) },
+                            label = { Text("You", fontSize = 11.sp) },
                             colors = AssistChipDefaults.assistChipColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                labelColor = MaterialTheme.colorScheme.onPrimary
+                                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                labelColor = MaterialTheme.colorScheme.primary
                             ),
-                            modifier = Modifier.height(24.dp)
+                            modifier = Modifier.height(22.dp)
                         )
                     }
                 }

@@ -162,8 +162,15 @@ class RoomViewModel : ViewModel() {
                 val room = document.toObject(Room::class.java)
                 val currentUserEmail = auth.currentUser?.email
 
-                // Check if current user is owner or member (for private groups)
-                if (room?.isPrivate == true && room.ownerEmail != currentUserEmail && !room.members.contains(currentUserEmail)) {
+                // Check if current user is owner or member (for any type of group)
+                // Allow inviting to any room where the user is a member, except DMs
+                if (room?.isDirect == true) {
+                    onResult(false, "Cannot invite to direct messages")
+                    return@addOnSuccessListener
+                }
+
+                // Check if user has permission to invite (must be owner or member)
+                if (room?.ownerEmail != currentUserEmail && !room?.members?.contains(currentUserEmail)!!) {
                     onResult(false, "You don't have permission to invite to this room")
                     return@addOnSuccessListener
                 }

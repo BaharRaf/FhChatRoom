@@ -1,44 +1,16 @@
 package com.example.fhchatroom.screen
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,8 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fhchatroom.Injection
-import com.example.fhchatroom.data.FriendshipStatus
-import com.example.fhchatroom.data.User
+import com.example.fhchatroom.data.*
 import com.example.fhchatroom.viewmodel.FriendsViewModel
 import com.example.fhchatroom.viewmodel.RoomViewModel
 import com.google.firebase.auth.FirebaseAuth
@@ -61,18 +32,24 @@ fun FriendsScreen(
     onBack: () -> Unit = {},
     onStartDirectMessage: (String) -> Unit
 ) {
+    val friendsViewModel: FriendsViewModel = viewModel()
+    val friends by friendsViewModel.friends.observeAsState(emptyList())
+    val receivedRequests by friendsViewModel.receivedRequests.observeAsState(emptyList())
+    val sentRequests by friendsViewModel.sentRequests.observeAsState(emptyList())
+
     val firestore = Injection.instance()
-    val current = FirebaseAuth.getInstance().currentUser?.email
+    val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email
     var users by remember { mutableStateOf(listOf<User>()) }
     var reg: ListenerRegistration? by remember { mutableStateOf(null) }
+    var selectedTab by remember { mutableStateOf(0) }
 
-    // Real-time users; only "signed up" (have an email that looks valid)
+    // Real-time users listener
     DisposableEffect(Unit) {
         reg = firestore.collection("users")
             .addSnapshotListener { snap, _ ->
                 users = snap?.documents
                     ?.mapNotNull { it.toObject(User::class.java) }
-                    ?.filter { it.email.isNotBlank() && it.email.contains("@") }
+                    ?.filter { it.email.isNotBlank() && it.email.contains("@") && it.email != currentUserEmail }
                     ?: emptyList()
             }
         onDispose { reg?.remove() }
@@ -81,7 +58,7 @@ fun FriendsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("People") },
+                title = { Text("Friends & People") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
@@ -90,29 +67,523 @@ fun FriendsScreen(
             )
         }
     ) { padding ->
-        // Scrollable people list
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            val filtered = users
-                .filter { it.email != current }
-                .sortedBy { (it.firstName + it.lastName + it.email).lowercase() }
+            // Tab Row
+            TabRow(selectedTabIndex = selectedTab) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Friends")
+                            if (friends.isNotEmpty()) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Badge { Text(friends.size.toString()) }
+                            }
+                        }
+                    }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Requests")
+                            if (receivedRequests.isNotEmpty()) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Badge(
+                                    containerColor = MaterialTheme.colorScheme.error
+                                ) { Text(receivedRequests.size.toString()) }
+                            }
+                        }
+                    }
+                )
+                Tab(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    text = { Text("All People") }
+                )
+            }
 
-            items(filtered, key = { it.email }) { user ->
-                AllUsersItem(user = user, onStartDirectMessage = onStartDirectMessage)
+            // Content based on selected tab
+            when (selectedTab) {
+                0 -> FriendsListContent(
+                    friends = friends,
+                    onStartDirectMessage = onStartDirectMessage,
+                    onRemoveFriend = { friend ->
+                        friendsViewModel.removeFriend(friend)
+                    }
+                )
+                1 -> RequestsContent(
+                    receivedRequests = receivedRequests,
+                    sentRequests = sentRequests,
+                    onAcceptRequest = { request ->
+                        friendsViewModel.acceptFriendRequest(request)
+                    },
+                    onDeclineRequest = { request ->
+                        friendsViewModel.declineFriendRequest(request)
+                    },
+                    onCancelRequest = { request ->
+                        friendsViewModel.cancelFriendRequest(request)
+                    }
+                )
+                2 -> AllPeopleContent(
+                    users = users.sortedBy { (it.firstName + it.lastName + it.email).lowercase() },
+                    onStartDirectMessage = onStartDirectMessage,
+                    friendsViewModel = friendsViewModel
+                )
             }
         }
     }
 }
 
-// Backwards-compat overload (if some old route still calls FriendsScreen(roomId,...))
 @Composable
-fun FriendsScreen(roomId: String, onBack: () -> Unit) {
-    FriendsScreen(onBack = onBack, onStartDirectMessage = { /* no-op here */ })
+private fun FriendsListContent(
+    friends: List<Friend>,
+    onStartDirectMessage: (String) -> Unit,
+    onRemoveFriend: (Friend) -> Unit
+) {
+    if (friends.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    Icons.Filled.PersonOff,
+                    contentDescription = null,
+                    modifier = Modifier.size(64.dp),
+                    tint = Color.Gray
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    "No friends yet",
+                    color = Color.Gray,
+                    fontSize = 18.sp
+                )
+                Text(
+                    "Send friend requests to connect!",
+                    color = Color.Gray,
+                    fontSize = 14.sp
+                )
+            }
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(friends, key = { it.email }) { friend ->
+                FriendItem(
+                    friend = friend,
+                    onStartDirectMessage = onStartDirectMessage,
+                    onRemoveFriend = { onRemoveFriend(friend) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RequestsContent(
+    receivedRequests: List<FriendRequest>,
+    sentRequests: List<FriendRequest>,
+    onAcceptRequest: (FriendRequest) -> Unit,
+    onDeclineRequest: (FriendRequest) -> Unit,
+    onCancelRequest: (FriendRequest) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (receivedRequests.isNotEmpty()) {
+            item {
+                Text(
+                    "Received Requests",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
+            items(receivedRequests, key = { it.id }) { request ->
+                ReceivedRequestItem(
+                    request = request,
+                    onAccept = { onAcceptRequest(request) },
+                    onDecline = { onDeclineRequest(request) }
+                )
+            }
+        }
+
+        if (sentRequests.isNotEmpty()) {
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    "Sent Requests",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
+            items(sentRequests, key = { it.id }) { request ->
+                SentRequestItem(
+                    request = request,
+                    onCancel = { onCancelRequest(request) }
+                )
+            }
+        }
+
+        if (receivedRequests.isEmpty() && sentRequests.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "No pending friend requests",
+                        color = Color.Gray,
+                        fontSize = 16.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AllPeopleContent(
+    users: List<User>,
+    onStartDirectMessage: (String) -> Unit,
+    friendsViewModel: FriendsViewModel
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        items(users, key = { it.email }) { user ->
+            AllUsersItem(
+                user = user,
+                onStartDirectMessage = onStartDirectMessage,
+                friendsViewModel = friendsViewModel
+            )
+        }
+    }
+}
+
+@Composable
+private fun FriendItem(
+    friend: Friend,
+    onStartDirectMessage: (String) -> Unit,
+    onRemoveFriend: () -> Unit
+) {
+    val rooms: RoomViewModel = viewModel()
+    var showRemoveDialog by remember { mutableStateOf(false) }
+    var isOnline by remember { mutableStateOf(false) }
+    val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+
+    // Listen to real-time online status from RTDB
+    DisposableEffect(friend.email) {
+        val encodedEmail = friend.email.replace(".", ",")
+        val statusRef = database.getReference("status/$encodedEmail")
+
+        val statusListener = object : com.google.firebase.database.ValueEventListener {
+            override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+                isOnline = snapshot.getValue(Boolean::class.java) ?: false
+            }
+
+            override fun onCancelled(error: com.google.firebase.database.DatabaseError) {
+                // Handle error silently
+            }
+        }
+
+        statusRef.addValueEventListener(statusListener)
+
+        onDispose {
+            statusRef.removeEventListener(statusListener)
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(1.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Avatar
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .size(48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "${friend.firstName.firstOrNull() ?: ""}${friend.lastName.firstOrNull() ?: ""}",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "${friend.firstName} ${friend.lastName}".trim(),
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 16.sp
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(if (isOnline) Color.Green else Color.Gray)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isOnline) "Online" else "Offline",
+                        fontSize = 12.sp,
+                        color = if (isOnline) Color.Green else Color.Gray
+                    )
+                }
+            }
+
+            Row {
+                IconButton(onClick = {
+                    rooms.openOrCreateDirectRoom(friend.email) { dmRoomId ->
+                        onStartDirectMessage(dmRoomId)
+                    }
+                }) {
+                    Icon(Icons.Filled.Message, contentDescription = "Message")
+                }
+
+                IconButton(onClick = { showRemoveDialog = true }) {
+                    Icon(
+                        Icons.Filled.PersonRemove,
+                        contentDescription = "Remove Friend",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+    }
+
+    if (showRemoveDialog) {
+        AlertDialog(
+            onDismissRequest = { showRemoveDialog = false },
+            title = { Text("Remove Friend") },
+            text = { Text("Are you sure you want to remove ${friend.firstName} from your friends?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onRemoveFriend()
+                        showRemoveDialog = false
+                    }
+                ) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRemoveDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun ReceivedRequestItem(
+    request: FriendRequest,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit
+) {
+    var isOnline by remember { mutableStateOf(false) }
+    val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+
+    // Listen to real-time online status from RTDB
+    DisposableEffect(request.fromEmail) {
+        val encodedEmail = request.fromEmail.replace(".", ",")
+        val statusRef = database.getReference("status/$encodedEmail")
+
+        val statusListener = object : com.google.firebase.database.ValueEventListener {
+            override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+                isOnline = snapshot.getValue(Boolean::class.java) ?: false
+            }
+
+            override fun onCancelled(error: com.google.firebase.database.DatabaseError) {
+                // Handle error silently
+            }
+        }
+
+        statusRef.addValueEventListener(statusListener)
+
+        onDispose {
+            statusRef.removeEventListener(statusListener)
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+        )
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box {
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .size(48.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = request.fromName.split(" ").mapNotNull { it.firstOrNull() }.joinToString(""),
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                // Online indicator
+                if (isOnline) {
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(CircleShape)
+                            .background(Color.Green)
+                            .align(Alignment.BottomEnd)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = request.fromName,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 16.sp
+                )
+                Text(
+                    text = if (isOnline) "Wants to be your friend • Online" else "Wants to be your friend",
+                    fontSize = 12.sp,
+                    color = if (isOnline) Color.Green else Color.Gray
+                )
+            }
+
+            Row {
+                Button(
+                    onClick = onAccept,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Green.copy(alpha = 0.8f)
+                    )
+                ) {
+                    Text("Accept", fontSize = 12.sp)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                OutlinedButton(onClick = onDecline) {
+                    Text("Decline", fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SentRequestItem(
+    request: FriendRequest,
+    onCancel: () -> Unit
+) {
+    var isOnline by remember { mutableStateOf(false) }
+    val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+
+    // Listen to real-time online status from RTDB
+    DisposableEffect(request.toEmail) {
+        val encodedEmail = request.toEmail.replace(".", ",")
+        val statusRef = database.getReference("status/$encodedEmail")
+
+        val statusListener = object : com.google.firebase.database.ValueEventListener {
+            override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+                isOnline = snapshot.getValue(Boolean::class.java) ?: false
+            }
+
+            override fun onCancelled(error: com.google.firebase.database.DatabaseError) {
+                // Handle error silently
+            }
+        }
+
+        statusRef.addValueEventListener(statusListener)
+
+        onDispose {
+            statusRef.removeEventListener(statusListener)
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box {
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .size(48.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = request.toName.split(" ").mapNotNull { it.firstOrNull() }.joinToString(""),
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                // Online indicator
+                if (isOnline) {
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(CircleShape)
+                            .background(Color.Green)
+                            .align(Alignment.BottomEnd)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = request.toName,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 16.sp
+                )
+                Text(
+                    text = if (isOnline) "Request pending • Online" else "Request pending",
+                    fontSize = 12.sp,
+                    color = if (isOnline) Color.Green else Color.Gray
+                )
+            }
+
+            OutlinedButton(onClick = onCancel) {
+                Text("Cancel", fontSize = 12.sp)
+            }
+        }
+    }
 }
 
 @Composable
@@ -123,10 +594,34 @@ private fun AllUsersItem(
     rooms: RoomViewModel = viewModel()
 ) {
     var friendshipStatus by remember { mutableStateOf<FriendshipStatus?>(null) }
+    var isOnline by remember { mutableStateOf(false) }
+    val database = com.google.firebase.database.FirebaseDatabase.getInstance()
 
     LaunchedEffect(user.email) {
         friendsViewModel.getFriendshipStatus(user.email) { status ->
             friendshipStatus = status
+        }
+    }
+
+    // Listen to real-time online status from RTDB
+    DisposableEffect(user.email) {
+        val encodedEmail = user.email.replace(".", ",")
+        val statusRef = database.getReference("status/$encodedEmail")
+
+        val statusListener = object : com.google.firebase.database.ValueEventListener {
+            override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+                isOnline = snapshot.getValue(Boolean::class.java) ?: false
+            }
+
+            override fun onCancelled(error: com.google.firebase.database.DatabaseError) {
+                // Handle error silently
+            }
+        }
+
+        statusRef.addValueEventListener(statusListener)
+
+        onDispose {
+            statusRef.removeEventListener(statusListener)
         }
     }
 
@@ -136,25 +631,34 @@ private fun AllUsersItem(
         elevation = CardDefaults.cardElevation(1.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Avatar (initials)
-            Box(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                    .height(40.dp)
-                    .padding(horizontal = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "${user.firstName.firstOrNull() ?: ""}${user.lastName.firstOrNull() ?: ""}",
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+            Box {
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .height(40.dp)
+                        .padding(horizontal = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "${user.firstName.firstOrNull() ?: ""}${user.lastName.firstOrNull() ?: ""}",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                // Online status indicator
+                if (isOnline) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(Color.Green)
+                            .align(Alignment.BottomEnd)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(12.dp))
@@ -165,11 +669,20 @@ private fun AllUsersItem(
                     fontWeight = FontWeight.Medium,
                     fontSize = 16.sp
                 )
-                Text(
-                    text = user.email,
-                    fontSize = 12.sp,
-                    color = Color.Gray
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(if (isOnline) Color.Green else Color.Gray)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isOnline) "Online" else user.email,
+                        fontSize = 12.sp,
+                        color = if (isOnline) Color.Green else Color.Gray
+                    )
+                }
             }
 
             Column(
@@ -213,7 +726,6 @@ private fun AllUsersItem(
 
                 OutlinedButton(
                     onClick = {
-                        // Create/open DM ONLY when user initiates it
                         rooms.openOrCreateDirectRoom(user.email) { dmRoomId ->
                             onStartDirectMessage(dmRoomId)
                         }
@@ -224,4 +736,10 @@ private fun AllUsersItem(
             }
         }
     }
+}
+
+// Backwards-compat overload
+@Composable
+fun FriendsScreen(roomId: String, onBack: () -> Unit) {
+    FriendsScreen(onBack = onBack, onStartDirectMessage = { })
 }
