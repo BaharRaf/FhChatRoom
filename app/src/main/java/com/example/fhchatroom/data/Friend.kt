@@ -1,7 +1,5 @@
 package com.example.fhchatroom.data
 
-import com.google.firebase.firestore.Exclude
-
 data class Friend(
     val email: String = "",
     val firstName: String = "",
@@ -18,18 +16,10 @@ data class FriendRequest(
     val fromName: String = "",
     val toName: String = "",
     val fromProfilePhoto: String = "",
-    var statusString: String = FriendRequestStatus.PENDING.name,
+    val statusString: String = FriendRequestStatus.PENDING.name,
     val sentAt: Long = System.currentTimeMillis(),
     val respondedAt: Long = 0L
-) {
-    @get:Exclude
-    val status: FriendRequestStatus
-        get() = try {
-            FriendRequestStatus.valueOf(statusString)
-        } catch (e: Exception) {
-            FriendRequestStatus.PENDING
-        }
-}
+)
 
 enum class FriendRequestStatus {
     PENDING,
