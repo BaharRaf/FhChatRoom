@@ -650,7 +650,6 @@ private fun AllUsersItem(
     onSwitchToRequestsTab: () -> Unit
 ) {
     var isOnline by remember { mutableStateOf(false) }
-    var refreshTrigger by remember { mutableStateOf(0) }
     val database = com.google.firebase.database.FirebaseDatabase.getInstance()
     val friendshipStatus by remember(user.email, friends, receivedRequests, sentRequests) {
         derivedStateOf { friendsViewModel.resolveFriendshipStatus(user.email) }

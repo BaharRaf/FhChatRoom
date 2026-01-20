@@ -1,7 +1,6 @@
 package com.example.fhchatroom.data
 
 import com.google.firebase.firestore.Exclude
-import com.google.firebase.firestore.PropertyName
 
 data class Friend(
     val email: String = "",
@@ -19,8 +18,7 @@ data class FriendRequest(
     val fromName: String = "",
     val toName: String = "",
     val fromProfilePhoto: String = "",
-    @get:PropertyName("status")
-    @set:PropertyName("status")    var statusString: String = FriendRequestStatus.PENDING.name,
+    var statusString: String = FriendRequestStatus.PENDING.name,
     val sentAt: Long = System.currentTimeMillis(),
     val respondedAt: Long = 0L
 ) {

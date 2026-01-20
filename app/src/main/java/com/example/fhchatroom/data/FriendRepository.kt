@@ -39,7 +39,7 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
             val existingRequest = firestore.collection("friendRequests")
                 .whereEqualTo("fromEmail", fromEmail)
                 .whereEqualTo("toEmail", toEmail)
-                .whereEqualTo("status", FriendRequestStatus.PENDING.name)
+                .whereEqualTo("statusString", FriendRequestStatus.PENDING.name)
                 .get()
                 .await()
 
@@ -111,7 +111,7 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
             // Update request status
             val requestRef = firestore.collection("friendRequests").document(requestId)
             batch.update(requestRef, mapOf(
-                "status" to FriendRequestStatus.ACCEPTED.name,
+                "statusString" to FriendRequestStatus.ACCEPTED.name,
                 "respondedAt" to System.currentTimeMillis()
             ))
 
@@ -140,7 +140,7 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
     suspend fun declineFriendRequest(requestId: String): Result<Unit> = try {
         firestore.collection("friendRequests").document(requestId)
             .update(mapOf(
-                "status" to FriendRequestStatus.DECLINED.name,
+                "statusString" to FriendRequestStatus.DECLINED.name,
                 "respondedAt" to System.currentTimeMillis()
             ))
             .await()
@@ -153,7 +153,7 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
     suspend fun cancelFriendRequest(requestId: String): Result<Unit> = try {
         firestore.collection("friendRequests").document(requestId)
             .update(mapOf(
-                "status" to FriendRequestStatus.CANCELLED.name,
+                "statusString" to FriendRequestStatus.CANCELLED.name,
                 "respondedAt" to System.currentTimeMillis()
             ))
             .await()
@@ -265,7 +265,7 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
             val sentRequest = firestore.collection("friendRequests")
                 .whereEqualTo("fromEmail", userEmail)
                 .whereEqualTo("toEmail", otherUserEmail)
-                .whereEqualTo("status", FriendRequestStatus.PENDING.name)
+                .whereEqualTo("statusString", FriendRequestStatus.PENDING.name)
                 .get()
                 .await()
 
@@ -276,7 +276,7 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
             val receivedRequest = firestore.collection("friendRequests")
                 .whereEqualTo("fromEmail", otherUserEmail)
                 .whereEqualTo("toEmail", userEmail)
-                .whereEqualTo("status", FriendRequestStatus.PENDING.name)
+                .whereEqualTo("statusString", FriendRequestStatus.PENDING.name)
                 .get()
                 .await()
 

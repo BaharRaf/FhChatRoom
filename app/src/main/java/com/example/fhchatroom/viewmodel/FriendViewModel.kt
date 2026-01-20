@@ -30,7 +30,7 @@ class FriendsViewModel : ViewModel() {
     private val _currentUser = MutableLiveData<User?>()
     val currentUser: LiveData<User?> = _currentUser
 
-    private val _operationResult = MutableLiveData<Result<String>?>()
+    private val _operationResult = MutableLiveData<Result<String>?>(null)
     val operationResult: LiveData<Result<String>?> = _operationResult
 
     init {
@@ -95,7 +95,6 @@ class FriendsViewModel : ViewModel() {
                     _sentRequests.value = updated
                     _operationResult.value = Result.Success("Friend request sent")
                 }
-
                 is Result.Error -> _operationResult.value = Result.Error(result.exception)
             }
         }
@@ -126,14 +125,12 @@ class FriendsViewModel : ViewModel() {
                                 _friends.value = listOf(friend) + current
                             }
                         }
-
                         is Result.Error -> {
                             // Ignore; real-time listener will refresh friend list
                         }
                     }
                     _operationResult.value = Result.Success("Friend request accepted")
                 }
-
                 is Result.Error -> _operationResult.value = Result.Error(result.exception)
             }
         }
@@ -148,7 +145,6 @@ class FriendsViewModel : ViewModel() {
                         .filterNot { it.id == request.id }
                     _operationResult.value = Result.Success("Friend request declined")
                 }
-
                 is Result.Error -> _operationResult.value = Result.Error(result.exception)
             }
         }
@@ -163,7 +159,6 @@ class FriendsViewModel : ViewModel() {
                         .filterNot { it.id == request.id }
                     _operationResult.value = Result.Success("Friend request cancelled")
                 }
-
                 is Result.Error -> _operationResult.value = Result.Error(result.exception)
             }
         }

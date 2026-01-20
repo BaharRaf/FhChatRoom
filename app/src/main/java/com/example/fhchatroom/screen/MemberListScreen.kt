@@ -69,6 +69,8 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import androidx.compose.runtime.derivedStateOf
+import com.example.fhchatroom.data.Friend
 
 @Composable
 fun MemberListScreen(
@@ -92,6 +94,7 @@ fun MemberListScreen(
 
     // Observe friends operation results
     val operationResult by friendsViewModel.operationResult.observeAsState()
+    val friends by friendsViewModel.friends.observeAsState(emptyList())
 
     // Handle operation results
     LaunchedEffect(operationResult) {
@@ -257,6 +260,7 @@ fun MemberListScreen(
                         friendsViewModel.sendFriendRequest(targetUser)
                     },
                     friendsViewModel = friendsViewModel,
+                    friends = friends,
                     onStartDirectMessage = onStartDirectMessage
                 )
             }
@@ -314,25 +318,17 @@ fun MemberItem(
     isOwner: Boolean = false,
     onAddFriend: (User) -> Unit,
     friendsViewModel: FriendsViewModel,
+    friends: List<Friend>,
     onStartDirectMessage: (String) -> Unit
 ) {
-    var friendshipStatus by remember { mutableStateOf<FriendshipStatus?>(null) }
-    // REAL-TIME SYNC FIX: Add refreshTrigger and observe request lists
-    var refreshTrigger by remember { mutableStateOf(0) }
     val receivedRequests by friendsViewModel.receivedRequests.observeAsState(emptyList())
     val sentRequests by friendsViewModel.sentRequests.observeAsState(emptyList())
+    val friendshipStatus by remember(user.email, friends, receivedRequests, sentRequests) {
+        derivedStateOf { friendsViewModel.resolveFriendshipStatus(user.email) }
+    }
     
     // Room VM used to open/create a 1:1 room
     val rooms = androidx.lifecycle.viewmodel.compose.viewModel<com.example.fhchatroom.viewmodel.RoomViewModel>()
-
-    // REAL-TIME SYNC FIX: Update LaunchedEffect to include request lists and refreshTrigger
-    LaunchedEffect(user.email, receivedRequests.size, sentRequests.size, refreshTrigger) {
-        if (!isCurrentUser) {
-            friendsViewModel.getFriendshipStatus(user.email) { status ->
-                friendshipStatus = status
-            }
-        }
-    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -482,7 +478,6 @@ fun MemberItem(
                                     AssistChip(
                                         onClick = {
                                             friendsViewModel.cancelFriendRequest(sentRequest)
-                                            refreshTrigger++
                                         },
                                         label = { Text("Cancel", fontSize = 12.sp) },
                                         colors = AssistChipDefaults.assistChipColors(
@@ -521,7 +516,6 @@ fun MemberItem(
                             Button(
                                 onClick = { 
                                     onAddFriend(user)
-                                    refreshTrigger++  // REAL-TIME SYNC FIX: Trigger immediate refresh
                                 },
                                 modifier = Modifier.height(36.dp),
                                 colors = ButtonDefaults.buttonColors(
