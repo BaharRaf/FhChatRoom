@@ -41,13 +41,15 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
                 return Result.Error(Exception("Friend request already sent"))
             }
 
-            val request = FriendRequest(
-                fromEmail = fromEmail,
-                toEmail = toEmail,
-                fromName = fromName,
-                toName = toName,
-                fromProfilePhoto = fromProfilePhoto,
-                status = FriendRequestStatus.PENDING
+            val request = hashMapOf(
+                "fromEmail" to fromEmail,
+                "toEmail" to toEmail,
+                "fromName" to fromName,
+                "toName" to toName,
+                "fromProfilePhoto" to fromProfilePhoto,
+                "status" to FriendRequestStatus.PENDING.name,
+                "sentAt" to System.currentTimeMillis(),
+                "respondedAt" to 0L
             )
 
             firestore.collection("friendRequests").add(request).await()
@@ -63,7 +65,11 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
             .whereEqualTo("toEmail", userEmail)
             .whereEqualTo("status", FriendRequestStatus.PENDING.name)
             .orderBy("sentAt", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    // Handle error
+                    return@addSnapshotListener
+                }
                 snapshot?.let {
                     val requests = it.documents.mapNotNull { doc ->
                         doc.toObject(FriendRequest::class.java)?.copy(id = doc.id)
@@ -80,7 +86,11 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
             .whereEqualTo("fromEmail", userEmail)
             .whereEqualTo("status", FriendRequestStatus.PENDING.name)
             .orderBy("sentAt", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    // Handle error
+                    return@addSnapshotListener
+                }
                 snapshot?.let {
                     val requests = it.documents.mapNotNull { doc ->
                         doc.toObject(FriendRequest::class.java)?.copy(id = doc.id)
@@ -152,7 +162,11 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
     fun getFriends(userEmail: String): Flow<List<Friend>> = callbackFlow {
         val subscription = firestore.collection("friendships")
             .whereEqualTo("user1", userEmail)
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    // Handle error
+                    return@addSnapshotListener
+                }
                 snapshot?.let { friendshipSnapshot ->
                     val friendEmails = friendshipSnapshot.documents.mapNotNull { doc ->
                         doc.getString("user2")
