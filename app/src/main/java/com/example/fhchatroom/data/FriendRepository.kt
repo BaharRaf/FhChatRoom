@@ -67,7 +67,7 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
     fun getReceivedFriendRequests(userEmail: String): Flow<List<FriendRequest>> = callbackFlow {
         val subscription = firestore.collection("friendRequests")
             .whereEqualTo("toEmail", userEmail)
-            .whereEqualTo("status", FriendRequestStatus.PENDING.name)
+            .whereEqualTo("statusString", FriendRequestStatus.PENDING.name)
             .orderBy("sentAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
@@ -88,7 +88,7 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
     fun getSentFriendRequests(userEmail: String): Flow<List<FriendRequest>> = callbackFlow {
         val subscription = firestore.collection("friendRequests")
             .whereEqualTo("fromEmail", userEmail)
-            .whereEqualTo("status", FriendRequestStatus.PENDING.name)
+            .whereEqualTo("statusString", FriendRequestStatus.PENDING.name)
             .orderBy("sentAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
