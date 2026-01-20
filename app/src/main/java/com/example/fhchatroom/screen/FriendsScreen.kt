@@ -25,6 +25,7 @@ import com.example.fhchatroom.viewmodel.FriendsViewModel
 import com.example.fhchatroom.viewmodel.RoomViewModel
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ListenerRegistration
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +43,9 @@ fun FriendsScreen(
     var users by remember { mutableStateOf(listOf<User>()) }
     var reg: ListenerRegistration? by remember { mutableStateOf(null) }
     var selectedTab by remember { mutableStateOf(0) }
+    
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     // Real-time users listener
     DisposableEffect(Unit) {
@@ -65,7 +69,8 @@ fun FriendsScreen(
                     }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -129,7 +134,8 @@ fun FriendsScreen(
                     },
                     onCancelRequest = { request ->
                         friendsViewModel.cancelFriendRequest(request)
-                    }
+                    },
+                    snackbarHostState = snackbarHostState
                 )
                 2 -> AllPeopleContent(
                     users = users.sortedBy { (it.firstName + it.lastName + it.email).lowercase() },
@@ -199,7 +205,8 @@ private fun RequestsContent(
     sentRequests: List<FriendRequest>,
     onAcceptRequest: (FriendRequest) -> Unit,
     onDeclineRequest: (FriendRequest) -> Unit,
-    onCancelRequest: (FriendRequest) -> Unit
+    onCancelRequest: (FriendRequest) -> Unit,
+    snackbarHostState: SnackbarHostState
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -218,7 +225,8 @@ private fun RequestsContent(
                 ReceivedRequestItem(
                     request = request,
                     onAccept = { onAcceptRequest(request) },
-                    onDecline = { onDeclineRequest(request) }
+                    onDecline = { onDeclineRequest(request) },
+                    snackbarHostState = snackbarHostState
                 )
             }
         }
@@ -413,10 +421,13 @@ private fun FriendItem(
 private fun ReceivedRequestItem(
     request: FriendRequest,
     onAccept: () -> Unit,
-    onDecline: () -> Unit
+    onDecline: () -> Unit,
+    snackbarHostState: SnackbarHostState
 ) {
     var isOnline by remember { mutableStateOf(false) }
+    var isProcessing by remember { mutableStateOf(false) }
     val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+    val scope = rememberCoroutineScope()
 
     // Listen to real-time online status from RTDB
     DisposableEffect(request.fromEmail) {
@@ -493,15 +504,45 @@ private fun ReceivedRequestItem(
 
             Row {
                 Button(
-                    onClick = onAccept,
+                    onClick = {
+                        isProcessing = true
+                        onAccept()
+                        kotlinx.coroutines.GlobalScope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = "Friend request accepted!",
+                                duration = SnackbarDuration.Short
+                            )
+                        }
+                    },
+                    enabled = !isProcessing,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.Green.copy(alpha = 0.8f)
                     )
                 ) {
-                    Text("Accept", fontSize = 12.sp)
+                    if (isProcessing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
+                    } else {
+                        Text("Accept", fontSize = 12.sp)
+                    }
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                OutlinedButton(onClick = onDecline) {
+                OutlinedButton(
+                    onClick = {
+                        isProcessing = true
+                        onDecline()
+                        kotlinx.coroutines.GlobalScope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = "Friend request declined",
+                                duration = SnackbarDuration.Short
+                            )
+                        }
+                    },
+                    enabled = !isProcessing
+                ) {
                     Text("Decline", fontSize = 12.sp)
                 }
             }
