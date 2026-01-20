@@ -317,11 +317,16 @@ fun MemberItem(
     onStartDirectMessage: (String) -> Unit
 ) {
     var friendshipStatus by remember { mutableStateOf<FriendshipStatus?>(null) }
+    // REAL-TIME SYNC FIX: Add refreshTrigger and observe request lists
+    var refreshTrigger by remember { mutableStateOf(0) }
+    val receivedRequests by friendsViewModel.receivedRequests.observeAsState(emptyList())
+    val sentRequests by friendsViewModel.sentRequests.observeAsState(emptyList())
+    
     // Room VM used to open/create a 1:1 room
     val rooms = androidx.lifecycle.viewmodel.compose.viewModel<com.example.fhchatroom.viewmodel.RoomViewModel>()
 
-    // Get friendship status for non-current users
-    LaunchedEffect(user.email) {
+    // REAL-TIME SYNC FIX: Update LaunchedEffect to include request lists and refreshTrigger
+    LaunchedEffect(user.email, receivedRequests.size, sentRequests.size, refreshTrigger) {
         if (!isCurrentUser) {
             friendsViewModel.getFriendshipStatus(user.email) { status ->
                 friendshipStatus = status
@@ -452,28 +457,49 @@ fun MemberItem(
                             )
                         }
                         FriendshipStatus.REQUEST_SENT -> {
-                            AssistChip(
-                                onClick = { },
-                                label = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            Icons.Default.Schedule,
-                                            contentDescription = "Request Sent",
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Sent", fontSize = 12.sp)
-                                    }
-                                },
-                                colors = AssistChipDefaults.assistChipColors(
-                                    containerColor = Color(0xFFFFA500).copy(alpha = 0.2f),
-                                    labelColor = Color(0xFFFFA500)
+                            // REAL-TIME SYNC FIX: Add Cancel button for sent requests
+                            val sentRequest = sentRequests.find { it.toEmail == user.email }
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                AssistChip(
+                                    onClick = { },
+                                    label = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                Icons.Default.Schedule,
+                                                contentDescription = "Pending",
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Pending", fontSize = 12.sp)
+                                        }
+                                    },
+                                    colors = AssistChipDefaults.assistChipColors(
+                                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                    )
                                 )
-                            )
+                                // Cancel button
+                                if (sentRequest != null) {
+                                    AssistChip(
+                                        onClick = {
+                                            friendsViewModel.cancelFriendRequest(sentRequest)
+                                            refreshTrigger++
+                                        },
+                                        label = { Text("Cancel", fontSize = 12.sp) },
+                                        colors = AssistChipDefaults.assistChipColors(
+                                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                                            labelColor = MaterialTheme.colorScheme.error
+                                        )
+                                    )
+                                }
+                            }
                         }
                         FriendshipStatus.REQUEST_RECEIVED -> {
+                            // REAL-TIME SYNC FIX: Show Respond button (can navigate to Requests tab)
                             AssistChip(
-                                onClick = { },
+                                onClick = { 
+                                    // Could navigate to Requests screen or show inline Accept/Decline
+                                    // For now, just show the button to indicate there's a pending request
+                                },
                                 label = {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
@@ -493,7 +519,10 @@ fun MemberItem(
                         }
                         FriendshipStatus.NOT_FRIENDS -> {
                             Button(
-                                onClick = { onAddFriend(user) },
+                                onClick = { 
+                                    onAddFriend(user)
+                                    refreshTrigger++  // REAL-TIME SYNC FIX: Trigger immediate refresh
+                                },
                                 modifier = Modifier.height(36.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.primary
