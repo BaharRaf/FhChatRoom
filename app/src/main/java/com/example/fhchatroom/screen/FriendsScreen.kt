@@ -25,7 +25,7 @@ import com.example.fhchatroom.viewmodel.FriendsViewModel
 import com.example.fhchatroom.viewmodel.RoomViewModel
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ListenerRegistration
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,7 +45,6 @@ fun FriendsScreen(
     var selectedTab by remember { mutableStateOf(0) }
     
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
 
     // Real-time users listener
     DisposableEffect(Unit) {
@@ -507,7 +506,7 @@ private fun ReceivedRequestItem(
                     onClick = {
                         isProcessing = true
                         onAccept()
-                        kotlinx.coroutines.GlobalScope.launch {
+                        scope.launch {
                             snackbarHostState.showSnackbar(
                                 message = "Friend request accepted!",
                                 duration = SnackbarDuration.Short
@@ -534,7 +533,7 @@ private fun ReceivedRequestItem(
                     onClick = {
                         isProcessing = true
                         onDecline()
-                        kotlinx.coroutines.GlobalScope.launch {
+                        scope.launch {
                             snackbarHostState.showSnackbar(
                                 message = "Friend request declined",
                                 duration = SnackbarDuration.Short
