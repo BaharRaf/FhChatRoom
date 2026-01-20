@@ -41,15 +41,14 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
                 return Result.Error(Exception("Friend request already sent"))
             }
 
-            val request = hashMapOf(
-                "fromEmail" to fromEmail,
-                "toEmail" to toEmail,
-                "fromName" to fromName,
-                "toName" to toName,
-                "fromProfilePhoto" to fromProfilePhoto,
-                "status" to FriendRequestStatus.PENDING.name,
-                "sentAt" to System.currentTimeMillis(),
-                "respondedAt" to 0L
+            val request = FriendRequest(
+                fromEmail = fromEmail,
+                toEmail = toEmail,
+                fromName = fromName,
+                toName = toName,
+                fromProfilePhoto = fromProfilePhoto,
+                statusString = FriendRequestStatus.PENDING.name,
+                sentAt = System.currentTimeMillis()
             )
 
             firestore.collection("friendRequests").add(request).await()
@@ -67,7 +66,7 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
             .orderBy("sentAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    // Handle error
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 snapshot?.let {
@@ -88,7 +87,7 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
             .orderBy("sentAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    // Handle error
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 snapshot?.let {
@@ -164,7 +163,7 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
             .whereEqualTo("user1", userEmail)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    // Handle error
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 snapshot?.let { friendshipSnapshot ->
