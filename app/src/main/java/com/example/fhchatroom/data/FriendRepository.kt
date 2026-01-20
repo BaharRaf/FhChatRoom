@@ -105,15 +105,12 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
         awaitClose { subscription.remove() }
     }
 
-    // Accept friend request
+    // Accept friend request - NOW DELETES THE REQUEST
     suspend fun acceptFriendRequest(requestId: String, fromEmail: String, toEmail: String): Result<Unit> = try {
         firestore.runBatch { batch ->
-            // Update request status
+            // DELETE the request instead of updating status
             val requestRef = firestore.collection("friendRequests").document(requestId)
-            batch.update(requestRef, mapOf(
-                "statusString" to FriendRequestStatus.ACCEPTED.name,
-                "respondedAt" to System.currentTimeMillis()
-            ))
+            batch.delete(requestRef)
 
             // Create friendship (both directions for easier querying)
             val friendship1 = hashMapOf(
@@ -136,27 +133,19 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
         Result.Error(e)
     }
 
-    // Decline friend request
+    // Decline friend request - NOW DELETES THE REQUEST
     suspend fun declineFriendRequest(requestId: String): Result<Unit> = try {
-        firestore.collection("friendRequests").document(requestId)
-            .update(mapOf(
-                "statusString" to FriendRequestStatus.DECLINED.name,
-                "respondedAt" to System.currentTimeMillis()
-            ))
-            .await()
+        // DELETE the request instead of updating status
+        firestore.collection("friendRequests").document(requestId).delete().await()
         Result.Success(Unit)
     } catch (e: Exception) {
         Result.Error(e)
     }
 
-    // Cancel sent friend request
+    // Cancel sent friend request - NOW DELETES THE REQUEST
     suspend fun cancelFriendRequest(requestId: String): Result<Unit> = try {
-        firestore.collection("friendRequests").document(requestId)
-            .update(mapOf(
-                "statusString" to FriendRequestStatus.CANCELLED.name,
-                "respondedAt" to System.currentTimeMillis()
-            ))
-            .await()
+        // DELETE the request instead of updating status
+        firestore.collection("friendRequests").document(requestId).delete().await()
         Result.Success(Unit)
     } catch (e: Exception) {
         Result.Error(e)
@@ -195,6 +184,9 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
                                     }
                                 }
                                 trySend(friends)
+                            }
+                            .addOnFailureListener {
+                                trySend(emptyList())
                             }
                     } else {
                         trySend(emptyList())
