@@ -10,7 +10,13 @@ import kotlinx.coroutines.tasks.await
 class FriendsRepository(private val firestore: FirebaseFirestore) {
 
     // Send friend request
-    suspend fun sendFriendRequest(fromEmail: String, toEmail: String, fromName: String, toName: String, fromProfilePhoto: String): Result<Unit> {
+    suspend fun sendFriendRequest(
+        fromEmail: String,
+        toEmail: String,
+        fromName: String,
+        toName: String,
+        fromProfilePhoto: String
+    ): Result<FriendRequest> {
         return try {
             // Check if users are already friends
             val existingFriendship = firestore.collection("friendships")
@@ -50,9 +56,8 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
                 statusString = FriendRequestStatus.PENDING.name,
                 sentAt = System.currentTimeMillis()
             )
-
-            firestore.collection("friendRequests").add(request).await()
-            Result.Success(Unit)
+            val requestRef = firestore.collection("friendRequests").add(request).await()
+            Result.Success(request.copy(id = requestRef.id))
         } catch (e: Exception) {
             Result.Error(e)
         }

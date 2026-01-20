@@ -649,16 +649,11 @@ private fun AllUsersItem(
     sentRequests: List<FriendRequest>,
     onSwitchToRequestsTab: () -> Unit
 ) {
-    var friendshipStatus by remember { mutableStateOf<FriendshipStatus?>(null) }
     var isOnline by remember { mutableStateOf(false) }
     var refreshTrigger by remember { mutableStateOf(0) }
     val database = com.google.firebase.database.FirebaseDatabase.getInstance()
-
-    // Check friendship status with refresh trigger - NOW INCLUDES FRIENDS LIST
-    LaunchedEffect(user.email, refreshTrigger, friends.size, receivedRequests.size, sentRequests.size) {
-        friendsViewModel.getFriendshipStatus(user.email) { status ->
-            friendshipStatus = status
-        }
+    val friendshipStatus by remember(user.email, friends, receivedRequests, sentRequests) {
+        derivedStateOf { friendsViewModel.resolveFriendshipStatus(user.email) }
     }
 
     // Listen to real-time online status from RTDB
@@ -785,7 +780,6 @@ private fun AllUsersItem(
                                 AssistChip(
                                     onClick = {
                                         friendsViewModel.cancelFriendRequest(sentRequest)
-                                        refreshTrigger++
                                     },
                                     label = { Text("Cancel", fontSize = 12.sp) },
                                     colors = AssistChipDefaults.assistChipColors(
@@ -812,7 +806,6 @@ private fun AllUsersItem(
                         Button(
                             onClick = {
                                 friendsViewModel.sendFriendRequest(user)
-                                refreshTrigger++
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {

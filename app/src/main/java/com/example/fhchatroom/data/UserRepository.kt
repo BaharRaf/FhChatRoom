@@ -61,4 +61,18 @@ class UserRepository(
     } catch (e: Exception) {
         Result.Error(e)
     }
+    suspend fun getUserByEmail(email: String): Result<User> = try {
+        val userDocument = firestore.collection("users")
+            .document(email)
+            .get()
+            .await()
+        val user = userDocument.toObject(User::class.java)
+        if (user != null) {
+            Result.Success(user)
+        } else {
+            Result.Error(Exception("User data not found"))
+        }
+    } catch (e: Exception) {
+        Result.Error(e)
+    }
 }

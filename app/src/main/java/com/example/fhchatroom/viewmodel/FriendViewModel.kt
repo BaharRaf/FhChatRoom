@@ -30,8 +30,8 @@ class FriendsViewModel : ViewModel() {
     private val _currentUser = MutableLiveData<User?>()
     val currentUser: LiveData<User?> = _currentUser
 
-    private val _operationResult = MutableLiveData<Result<String>>()
-    val operationResult: LiveData<Result<String>> = _operationResult
+    private val _operationResult = MutableLiveData<Result<String>?>()
+    val operationResult: LiveData<Result<String>?> = _operationResult
 
     init {
         loadCurrentUser()
@@ -89,7 +89,13 @@ class FriendsViewModel : ViewModel() {
                 fromProfilePhoto = currentUser.profilePhotoUrl
             )
             when (result) {
-                is Result.Success -> _operationResult.value = Result.Success("Friend request sent")
+                is Result.Success -> {
+                    val updated = listOf(result.data) + (_sentRequests.value ?: emptyList())
+                        .filterNot { it.id == result.data.id }
+                    _sentRequests.value = updated
+                    _operationResult.value = Result.Success("Friend request sent")
+                }
+
                 is Result.Error -> _operationResult.value = Result.Error(result.exception)
             }
         }
@@ -103,7 +109,31 @@ class FriendsViewModel : ViewModel() {
                 toEmail = request.toEmail
             )
             when (result) {
-                is Result.Success -> _operationResult.value = Result.Success("Friend request accepted")
+                is Result.Success -> {
+                    _receivedRequests.value = (_receivedRequests.value ?: emptyList())
+                        .filterNot { it.id == request.id }
+                    when (val userResult = userRepository.getUserByEmail(request.fromEmail)) {
+                        is Result.Success -> {
+                            val friend = Friend(
+                                email = userResult.data.email,
+                                firstName = userResult.data.firstName,
+                                lastName = userResult.data.lastName,
+                                profilePhotoUrl = userResult.data.profilePhotoUrl,
+                                isOnline = userResult.data.isOnline
+                            )
+                            val current = _friends.value ?: emptyList()
+                            if (current.none { it.email == friend.email }) {
+                                _friends.value = listOf(friend) + current
+                            }
+                        }
+
+                        is Result.Error -> {
+                            // Ignore; real-time listener will refresh friend list
+                        }
+                    }
+                    _operationResult.value = Result.Success("Friend request accepted")
+                }
+
                 is Result.Error -> _operationResult.value = Result.Error(result.exception)
             }
         }
@@ -113,7 +143,12 @@ class FriendsViewModel : ViewModel() {
         viewModelScope.launch {
             val result = friendsRepository.declineFriendRequest(request.id)
             when (result) {
-                is Result.Success -> _operationResult.value = Result.Success("Friend request declined")
+                is Result.Success -> {
+                    _receivedRequests.value = (_receivedRequests.value ?: emptyList())
+                        .filterNot { it.id == request.id }
+                    _operationResult.value = Result.Success("Friend request declined")
+                }
+
                 is Result.Error -> _operationResult.value = Result.Error(result.exception)
             }
         }
@@ -123,7 +158,12 @@ class FriendsViewModel : ViewModel() {
         viewModelScope.launch {
             val result = friendsRepository.cancelFriendRequest(request.id)
             when (result) {
-                is Result.Success -> _operationResult.value = Result.Success("Friend request cancelled")
+                is Result.Success -> {
+                    _sentRequests.value = (_sentRequests.value ?: emptyList())
+                        .filterNot { it.id == request.id }
+                    _operationResult.value = Result.Success("Friend request cancelled")
+                }
+
                 is Result.Error -> _operationResult.value = Result.Error(result.exception)
             }
         }
@@ -164,6 +204,18 @@ class FriendsViewModel : ViewModel() {
 
     fun clearOperationResult() {
         _operationResult.value = null
+    }
+
+    fun resolveFriendshipStatus(otherUserEmail: String): FriendshipStatus {
+        val friends = _friends.value ?: emptyList()
+        val sentRequests = _sentRequests.value ?: emptyList()
+        val receivedRequests = _receivedRequests.value ?: emptyList()
+        return when {
+            friends.any { it.email == otherUserEmail } -> FriendshipStatus.FRIENDS
+            sentRequests.any { it.toEmail == otherUserEmail } -> FriendshipStatus.REQUEST_SENT
+            receivedRequests.any { it.fromEmail == otherUserEmail } -> FriendshipStatus.REQUEST_RECEIVED
+            else -> FriendshipStatus.NOT_FRIENDS
+        }
     }
 
     fun getFriendshipStatus(otherUserEmail: String, callback: (FriendshipStatus) -> Unit) {
