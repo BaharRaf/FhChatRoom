@@ -134,7 +134,10 @@ fun FriendsScreen(
                 2 -> AllPeopleContent(
                     users = users.sortedBy { (it.firstName + it.lastName + it.email).lowercase() },
                     onStartDirectMessage = onStartDirectMessage,
-                    friendsViewModel = friendsViewModel
+                    friendsViewModel = friendsViewModel,
+                    receivedRequests = receivedRequests,
+                    sentRequests = sentRequests,
+                    onSwitchToRequestsTab = { selectedTab = 1 }
                 )
             }
         }
@@ -259,7 +262,10 @@ private fun RequestsContent(
 private fun AllPeopleContent(
     users: List<User>,
     onStartDirectMessage: (String) -> Unit,
-    friendsViewModel: FriendsViewModel
+    friendsViewModel: FriendsViewModel,
+    receivedRequests: List<FriendRequest>,
+    sentRequests: List<FriendRequest>,
+    onSwitchToRequestsTab: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -269,7 +275,10 @@ private fun AllPeopleContent(
             AllUsersItem(
                 user = user,
                 onStartDirectMessage = onStartDirectMessage,
-                friendsViewModel = friendsViewModel
+                friendsViewModel = friendsViewModel,
+                receivedRequests = receivedRequests,
+                sentRequests = sentRequests,
+                onSwitchToRequestsTab = onSwitchToRequestsTab
             )
         }
     }
@@ -591,13 +600,18 @@ private fun AllUsersItem(
     user: User,
     onStartDirectMessage: (String) -> Unit,
     friendsViewModel: FriendsViewModel = viewModel(),
-    rooms: RoomViewModel = viewModel()
+    rooms: RoomViewModel = viewModel(),
+    receivedRequests: List<FriendRequest>,
+    sentRequests: List<FriendRequest>,
+    onSwitchToRequestsTab: () -> Unit
 ) {
     var friendshipStatus by remember { mutableStateOf<FriendshipStatus?>(null) }
     var isOnline by remember { mutableStateOf(false) }
+    var refreshTrigger by remember { mutableStateOf(0) }
     val database = com.google.firebase.database.FirebaseDatabase.getInstance()
 
-    LaunchedEffect(user.email) {
+    // Check friendship status with refresh trigger
+    LaunchedEffect(user.email, refreshTrigger, receivedRequests.size, sentRequests.size) {
         friendsViewModel.getFriendshipStatus(user.email) { status ->
             friendshipStatus = status
         }
@@ -695,7 +709,7 @@ private fun AllUsersItem(
                             onClick = { },
                             label = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.Check, contentDescription = null)
+                                    Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text("Friends", fontSize = 12.sp)
                                 }
@@ -707,17 +721,58 @@ private fun AllUsersItem(
                         )
                     }
                     FriendshipStatus.REQUEST_SENT -> {
-                        AssistChip(onClick = { }, label = { Text("Sent", fontSize = 12.sp) })
+                        // Find the request to get the ID
+                        val sentRequest = sentRequests.find { it.toEmail == user.email }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            AssistChip(
+                                onClick = { },
+                                label = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Pending", fontSize = 12.sp)
+                                    }
+                                },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                )
+                            )
+                            if (sentRequest != null) {
+                                AssistChip(
+                                    onClick = {
+                                        friendsViewModel.cancelFriendRequest(sentRequest)
+                                        refreshTrigger++
+                                    },
+                                    label = { Text("Cancel", fontSize = 12.sp) },
+                                    colors = AssistChipDefaults.assistChipColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                                        labelColor = MaterialTheme.colorScheme.error
+                                    )
+                                )
+                            }
+                        }
                     }
                     FriendshipStatus.REQUEST_RECEIVED -> {
-                        AssistChip(onClick = { }, label = { Text("Respond", fontSize = 12.sp) })
+                        Button(
+                            onClick = onSwitchToRequestsTab,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Icon(Icons.Filled.Notifications, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Respond", fontSize = 12.sp)
+                        }
                     }
                     FriendshipStatus.NOT_FRIENDS, null -> {
                         Button(
-                            onClick = { friendsViewModel.sendFriendRequest(user) },
+                            onClick = {
+                                friendsViewModel.sendFriendRequest(user)
+                                refreshTrigger++
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
-                            Icon(Icons.Filled.PersonAdd, contentDescription = null)
+                            Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Add Friend", fontSize = 12.sp)
                         }
