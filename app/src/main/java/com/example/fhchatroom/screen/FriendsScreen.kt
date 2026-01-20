@@ -140,6 +140,7 @@ fun FriendsScreen(
                     users = users.sortedBy { (it.firstName + it.lastName + it.email).lowercase() },
                     onStartDirectMessage = onStartDirectMessage,
                     friendsViewModel = friendsViewModel,
+                    friends = friends,
                     receivedRequests = receivedRequests,
                     sentRequests = sentRequests,
                     onSwitchToRequestsTab = { selectedTab = 1 }
@@ -270,6 +271,7 @@ private fun AllPeopleContent(
     users: List<User>,
     onStartDirectMessage: (String) -> Unit,
     friendsViewModel: FriendsViewModel,
+    friends: List<Friend>,
     receivedRequests: List<FriendRequest>,
     sentRequests: List<FriendRequest>,
     onSwitchToRequestsTab: () -> Unit
@@ -283,6 +285,7 @@ private fun AllPeopleContent(
                 user = user,
                 onStartDirectMessage = onStartDirectMessage,
                 friendsViewModel = friendsViewModel,
+                friends = friends,
                 receivedRequests = receivedRequests,
                 sentRequests = sentRequests,
                 onSwitchToRequestsTab = onSwitchToRequestsTab
@@ -641,6 +644,7 @@ private fun AllUsersItem(
     onStartDirectMessage: (String) -> Unit,
     friendsViewModel: FriendsViewModel = viewModel(),
     rooms: RoomViewModel = viewModel(),
+    friends: List<Friend>,
     receivedRequests: List<FriendRequest>,
     sentRequests: List<FriendRequest>,
     onSwitchToRequestsTab: () -> Unit
@@ -650,8 +654,8 @@ private fun AllUsersItem(
     var refreshTrigger by remember { mutableStateOf(0) }
     val database = com.google.firebase.database.FirebaseDatabase.getInstance()
 
-    // Check friendship status with refresh trigger
-    LaunchedEffect(user.email, refreshTrigger, receivedRequests.size, sentRequests.size) {
+    // Check friendship status with refresh trigger - NOW INCLUDES FRIENDS LIST
+    LaunchedEffect(user.email, refreshTrigger, friends.size, receivedRequests.size, sentRequests.size) {
         friendsViewModel.getFriendshipStatus(user.email) { status ->
             friendshipStatus = status
         }
