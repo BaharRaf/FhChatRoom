@@ -1,5 +1,6 @@
 package com.example.fhchatroom.data
 
+import com.google.firebase.firestore.Exclude
 import com.google.firebase.firestore.PropertyName
 
 data class Friend(
@@ -18,19 +19,18 @@ data class FriendRequest(
     val fromName: String = "",
     val toName: String = "",
     val fromProfilePhoto: String = "",
-    @get:PropertyName("status") @set:PropertyName("status")
+    @PropertyName("status")
     var statusString: String = FriendRequestStatus.PENDING.name,
     val sentAt: Long = System.currentTimeMillis(),
     val respondedAt: Long = 0L
 ) {
-    @delegate:com.google.firebase.firestore.Exclude
-    val status: FriendRequestStatus by lazy {
-        try {
+    @get:Exclude
+    val status: FriendRequestStatus
+        get() = try {
             FriendRequestStatus.valueOf(statusString)
         } catch (e: Exception) {
             FriendRequestStatus.PENDING
         }
-    }
 }
 
 enum class FriendRequestStatus {
