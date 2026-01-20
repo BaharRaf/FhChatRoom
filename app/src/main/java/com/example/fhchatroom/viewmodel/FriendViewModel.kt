@@ -36,7 +36,8 @@ class FriendsViewModel : ViewModel() {
     init {
         loadCurrentUser()
         observeFriends()
-        observeRequests()
+        observeReceivedRequests()
+        observeSentRequests()
     }
 
     private fun loadCurrentUser() {
@@ -59,16 +60,18 @@ class FriendsViewModel : ViewModel() {
         }
     }
 
-    private fun observeRequests() {
+    private fun observeReceivedRequests() {
         val userEmail = auth.currentUser?.email ?: return
         viewModelScope.launch {
-            // Observe received requests
             friendsRepository.getReceivedFriendRequests(userEmail).collect { requests ->
                 _receivedRequests.value = requests
             }
         }
+    }
+
+    private fun observeSentRequests() {
+        val userEmail = auth.currentUser?.email ?: return
         viewModelScope.launch {
-            // Observe sent requests
             friendsRepository.getSentFriendRequests(userEmail).collect { requests ->
                 _sentRequests.value = requests
             }
