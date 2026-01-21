@@ -1,11 +1,12 @@
 package com.example.fhchatroom.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import com.example.fhchatroom.Injection
-import com.example.fhchatroom.data.Message
 import com.example.fhchatroom.data.Room
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ListenerRegistration
@@ -93,26 +94,51 @@ class RoomViewModel : ViewModel() {
             .addSnapshotListener { snapshot, error ->
                 if (error != null || snapshot == null) return@addSnapshotListener
 
-                val lastMessage = snapshot.documents.firstOrNull()?.toObject<Message>()
-                if (lastMessage != null) {
+                val doc = snapshot.documents.firstOrNull() ?: return@addSnapshotListener
+
+                try {
+                    // Manually extract fields to handle both Long and Timestamp types
+                    // DO NOT use toObject<Message>() as it may fail with type mismatch
+                    val text = doc.getString("text") ?: ""
+                    val senderFirstName = doc.getString("senderFirstName") ?: ""
+                    val type = doc.getString("type") ?: "TEXT"
+
+                    // Handle timestamp - can be Long (old data) or Timestamp (new data with server timestamp)
+                    val timestamp: Long = when (val ts = doc.get("timestamp")) {
+                        is Long -> ts
+                        is Timestamp -> ts.toDate().time
+                        is Number -> ts.toLong()
+                        else -> System.currentTimeMillis()
+                    }
+
                     // Update the room with last message info
-                    updateRoomWithLastMessage(roomId, lastMessage)
+                    updateRoomWithLastMessage(roomId, text, senderFirstName, timestamp, type)
+                } catch (e: Exception) {
+                    Log.e("RoomViewModel", "Error parsing last message for room $roomId", e)
                 }
             }
 
         messageListeners[roomId] = listener
     }
 
-    private fun updateRoomWithLastMessage(roomId: String, message: Message) {
+    private fun updateRoomWithLastMessage(
+        roomId: String,
+        text: String,
+        senderFirstName: String,
+        timestamp: Long,
+        type: String
+    ) {
+        val displayText = when (type) {
+            "IMAGE" -> "📷 Photo"
+            "VOICE" -> "🎤 Voice message"
+            else -> text.take(50)
+        }
+
         val updates = hashMapOf<String, Any>(
-            "lastMessage" to when (message.type.name) {
-                "IMAGE" -> "📷 Photo"
-                "VOICE" -> "🎤 Voice message"
-                else -> message.text.take(50)
-            },
-            "lastMessageSender" to message.senderFirstName,
-            "lastMessageTimestamp" to message.timestamp,
-            "lastMessageType" to message.type.name
+            "lastMessage" to displayText,
+            "lastMessageSender" to senderFirstName,
+            "lastMessageTimestamp" to timestamp,
+            "lastMessageType" to type
         )
 
         firestore.collection("rooms")

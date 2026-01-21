@@ -16,6 +16,7 @@ import com.example.fhchatroom.data.Result.Success
 import com.example.fhchatroom.data.User
 import com.example.fhchatroom.data.UserRepository
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -61,11 +62,11 @@ class MessageViewModel : ViewModel() {
 
     fun sendMessage(text: String, replyToMessage: Message? = null) {
         if (_currentUser.value != null && _roomId.value != null) {
-            val messageData = hashMapOf(
+            val messageData = hashMapOf<String, Any>(
                 "senderFirstName" to _currentUser.value!!.firstName,
                 "senderId" to _currentUser.value!!.email,
                 "text" to text,
-                "timestamp" to System.currentTimeMillis(),
+                "timestamp" to FieldValue.serverTimestamp(),
                 "type" to MessageType.TEXT.name,
                 "reactions" to emptyMap<String, String>(),
                 "deletedFor" to emptyList<String>()
@@ -115,11 +116,11 @@ class MessageViewModel : ViewModel() {
                 uploadTask.await()
                 val downloadUrl = storageRef.downloadUrl.await().toString()
 
-                val messageData = hashMapOf(
+                val messageData = hashMapOf<String, Any>(
                     "senderFirstName" to _currentUser.value!!.firstName,
                     "senderId" to _currentUser.value!!.email,
                     "text" to "Photo",
-                    "timestamp" to System.currentTimeMillis(),
+                    "timestamp" to FieldValue.serverTimestamp(),
                     "type" to MessageType.IMAGE.name,
                     "mediaUrl" to downloadUrl,
                     "reactions" to emptyMap<String, String>(),
@@ -162,11 +163,11 @@ class MessageViewModel : ViewModel() {
                 uploadTask.await()
                 val downloadUrl = storageRef.downloadUrl.await().toString()
 
-                val messageData = hashMapOf(
+                val messageData = hashMapOf<String, Any>(
                     "senderFirstName" to _currentUser.value!!.firstName,
                     "senderId" to _currentUser.value!!.email,
                     "text" to "Photo",
-                    "timestamp" to System.currentTimeMillis(),
+                    "timestamp" to FieldValue.serverTimestamp(),
                     "type" to MessageType.IMAGE.name,
                     "mediaUrl" to downloadUrl,
                     "reactions" to emptyMap<String, String>(),
@@ -207,11 +208,11 @@ class MessageViewModel : ViewModel() {
 
                 audioFile.delete()
 
-                val messageData = hashMapOf(
+                val messageData = hashMapOf<String, Any>(
                     "senderFirstName" to _currentUser.value!!.firstName,
                     "senderId" to _currentUser.value!!.email,
                     "text" to "Voice message",
-                    "timestamp" to System.currentTimeMillis(),
+                    "timestamp" to FieldValue.serverTimestamp(),
                     "type" to MessageType.VOICE.name,
                     "mediaUrl" to downloadUrl,
                     "mediaDuration" to duration,
@@ -279,10 +280,10 @@ class MessageViewModel : ViewModel() {
             try {
                 val currentUser = _currentUser.value ?: return@launch
 
-                val forwardData = hashMapOf(
+                val forwardData = hashMapOf<String, Any>(
                     "senderFirstName" to currentUser.firstName,
                     "senderId" to currentUser.email,
-                    "timestamp" to System.currentTimeMillis(),
+                    "timestamp" to FieldValue.serverTimestamp(),
                     "reactions" to emptyMap<String, String>(),
                     "deletedFor" to emptyList<String>()
                 )

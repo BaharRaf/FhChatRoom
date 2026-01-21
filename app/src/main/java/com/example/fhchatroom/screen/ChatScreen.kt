@@ -6,7 +6,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.net.Uri
@@ -54,10 +53,10 @@ import com.example.fhchatroom.viewmodel.MessageViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
-import java.time.Instant
-import java.time.LocalDateTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -754,7 +753,7 @@ fun ChatMessageItem(
             }
         }
 
-        // Sender name and timestamp
+        // Sender name and timestamp - UPDATED to use Date? type
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -996,14 +995,29 @@ private fun formatDuration(seconds: Int): String {
     return String.format("%d:%02d", minutes, secs)
 }
 
-@RequiresApi(Build.VERSION_CODES.O)
-private fun formatTimestamp(timestamp: Long): String {
-    val dt = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault())
-    val now = LocalDateTime.now()
-    val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
+// UPDATED: Now accepts Date? instead of Long to match Message.timestamp type
+private fun formatTimestamp(timestamp: Date?): String {
+    if (timestamp == null) return ""
+
+    val now = Calendar.getInstance()
+    val msgCal = Calendar.getInstance().apply { time = timestamp }
+
+    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+
     return when {
-        dt.toLocalDate() == now.toLocalDate() -> dt.format(timeFmt)
-        dt.toLocalDate().plusDays(1) == now.toLocalDate() -> "yesterday"
-        else -> dt.format(DateTimeFormatter.ofPattern("MMM d"))
+        // Same day
+        now.get(Calendar.YEAR) == msgCal.get(Calendar.YEAR) &&
+                now.get(Calendar.DAY_OF_YEAR) == msgCal.get(Calendar.DAY_OF_YEAR) -> {
+            timeFormat.format(timestamp)
+        }
+        // Yesterday
+        now.get(Calendar.YEAR) == msgCal.get(Calendar.YEAR) &&
+                now.get(Calendar.DAY_OF_YEAR) - msgCal.get(Calendar.DAY_OF_YEAR) == 1 -> {
+            "yesterday"
+        }
+        // Older
+        else -> {
+            SimpleDateFormat("MMM d", Locale.getDefault()).format(timestamp)
+        }
     }
 }
