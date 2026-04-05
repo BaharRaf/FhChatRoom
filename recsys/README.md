@@ -42,6 +42,26 @@ This writes demo files under `recsys/output/demo/`:
 - `recommendations.json`
 - `firestore_payloads.json`
 
+## Run it on exported JSON
+
+If you export Firestore collections to local JSON files, you can run the same offline pipeline on that snapshot:
+
+```bash
+python3 -m recsys.run_from_json \
+  --users path/to/users.json \
+  --rooms path/to/rooms.json \
+  --messages path/to/messages.json \
+  --output-dir /tmp/recsys-from-json
+```
+
+Expected input shape:
+
+- `users.json`: list or object of user docs
+- `rooms.json`: list or object of room docs
+- `messages.json`: flat list or object of message docs with `roomId`
+
+This stays fully offline and does not call Firebase.
+
 ## Bigger BA-style run
 
 You can scale the synthetic setup closer to the thesis assumptions:

@@ -1,0 +1,28 @@
+[
+  {
+    "id": "msg-1",
+    "roomId": "room-algorithms",
+    "senderId": "anna@stud.fh-campuswien.ac.at",
+    "text": "Let's review kotlin graph exercises before the algorithms exam.",
+    "day": 1,
+    "reactions": {
+      "clara@stud.fh-campuswien.ac.at": "👍"
+    }
+  },
+  {
+    "id": "msg-2",
+    "roomId": "room-algorithms",
+    "senderId": "clara@stud.fh-campuswien.ac.at",
+    "text": "I can explain data structures and firebase examples after class.",
+    "day": 2,
+    "reactionCount": 2
+  },
+  {
+    "id": "msg-3",
+    "roomId": "room-clinical",
+    "senderId": "ben@stud.fh-campuswien.ac.at",
+    "text": "Emergency care documentation practice tomorrow afternoon.",
+    "day": 1,
+    "reactionCount": 1
+  }
+]
