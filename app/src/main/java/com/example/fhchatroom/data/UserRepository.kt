@@ -13,10 +13,21 @@ class UserRepository(
         email: String,
         password: String,
         firstName: String,
-        lastName: String
+        lastName: String,
+        studyPath: String,
+        semester: Long
     ): Result<Boolean> = try {
         auth.createUserWithEmailAndPassword(email, password).await()
-        val user = User(firstName, lastName, email, isOnline = true)
+        val normalizedStudyPath = normalizeStudyPath(studyPath)
+        val user = User(
+            firstName = firstName.trim(),
+            lastName = lastName.trim(),
+            email = email.trim(),
+            studyPath = normalizedStudyPath,
+            semester = semester,
+            semesterBucket = semesterBucketFor(semester),
+            isOnline = true
+        )
         saveUserToFirestore(user)
         Result.Success(true)
     } catch (e: Exception) {

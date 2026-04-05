@@ -23,9 +23,23 @@ class AuthViewModel : ViewModel() {
     private val _authResult = MutableLiveData<Result<Boolean>?>()
     val authResult: MutableLiveData<Result<Boolean>?> get() = _authResult
 
-    fun signUp(email: String, password: String, firstName: String, lastName: String) {
+    fun signUp(
+        email: String,
+        password: String,
+        firstName: String,
+        lastName: String,
+        studyPath: String,
+        semester: Long
+    ) {
         viewModelScope.launch {
-            _authResult.value = userRepository.signUp(email, password, firstName, lastName)
+            _authResult.value = userRepository.signUp(
+                email = email,
+                password = password,
+                firstName = firstName,
+                lastName = lastName,
+                studyPath = studyPath,
+                semester = semester
+            )
         }
     }
     fun clearAuthResult() {

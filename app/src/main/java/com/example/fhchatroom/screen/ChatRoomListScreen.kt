@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -52,6 +53,8 @@ import com.example.fhchatroom.Injection
 import com.example.fhchatroom.data.Room
 import com.example.fhchatroom.data.User
 import com.example.fhchatroom.viewmodel.RoomViewModel
+import com.example.fhchatroom.viewmodel.RecommendationUiState
+import com.example.fhchatroom.viewmodel.RecommendationViewModel
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.tasks.await
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -73,6 +76,7 @@ private enum class RoomTab { PUBLIC, PRIVATE }
 @Composable
 fun ChatRoomListScreen(
     roomViewModel: RoomViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    recommendationViewModel: RecommendationViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     onJoinClicked: (Room) -> Unit,
     onLogout: () -> Unit,
     onNavigateToProfile: () -> Unit,
@@ -81,9 +85,11 @@ fun ChatRoomListScreen(
     onToggleTheme: () -> Unit
 ) {
     val rooms by roomViewModel.rooms.observeAsState(emptyList())
+    val recommendationState by recommendationViewModel.uiState.observeAsState(RecommendationUiState())
     var showDialog by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("") }
 
     // Search and Sort states
     var searchQuery by remember { mutableStateOf("") }
@@ -96,6 +102,28 @@ fun ChatRoomListScreen(
     var tab by remember { mutableStateOf(RoomTab.PUBLIC) }
 
     val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email
+    val recommendedRooms = recommendationState.roomIds
+        .mapNotNull { roomId -> rooms.firstOrNull { it.id == roomId } }
+        .filter { room -> currentUserEmail == null || !room.members.contains(currentUserEmail) }
+        .distinctBy { it.id }
+    val fallbackRecommendations = rooms
+        .filter { room ->
+            !room.isPrivate && !room.isDirect && (currentUserEmail == null || !room.members.contains(currentUserEmail))
+        }
+        .sortedWith(compareByDescending<Room> { it.members.size }.thenByDescending { it.lastMessageTimestamp })
+        .take(5)
+    val recommendationRooms = if (recommendedRooms.isNotEmpty()) recommendedRooms else fallbackRecommendations
+    val recommendationSubtitle = if (recommendedRooms.isNotEmpty()) {
+        buildString {
+            append(formatRecommendationSource(recommendationState.source))
+            if (recommendationState.generatedAt > 0L) {
+                append(" • updated ")
+                append(formatMessageTime(recommendationState.generatedAt))
+            }
+        }
+    } else {
+        "Popular public rooms shown until the nightly recommendation batch writes cached results."
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         // Top app bar
@@ -106,6 +134,21 @@ fun ChatRoomListScreen(
             isDarkTheme = isDarkTheme,
             onToggleTheme = onToggleTheme
         )
+
+        if (recommendationRooms.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            RecommendationSection(
+                rooms = recommendationRooms,
+                subtitle = recommendationSubtitle,
+                onRoomClicked = { room ->
+                    val isMember = currentUserEmail != null && room.members.contains(currentUserEmail)
+                    if (!isMember) {
+                        roomViewModel.joinRoom(room.id)
+                    }
+                    onJoinClicked(room)
+                }
+            )
+        }
 
         // Public/Private toggle
         Spacer(modifier = Modifier.height(6.dp))
@@ -197,7 +240,8 @@ fun ChatRoomListScreen(
         val filteredRooms = tabRooms.filter { room ->
             searchQuery.isEmpty() ||
                     room.name.contains(searchQuery, ignoreCase = true) ||
-                    room.description.contains(searchQuery, ignoreCase = true)
+                    room.description.contains(searchQuery, ignoreCase = true) ||
+                    room.category.contains(searchQuery, ignoreCase = true)
         }
 
         // Sort after filtering
@@ -297,6 +341,13 @@ fun ChatRoomListScreen(
                             modifier = Modifier.fillMaxWidth().padding(8.dp),
                             maxLines = 3
                         )
+                        OutlinedTextField(
+                            value = category,
+                            onValueChange = { category = it },
+                            label = { Text("Category (optional)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().padding(8.dp)
+                        )
                         Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(
                                 checked = isPrivate,
@@ -313,9 +364,10 @@ fun ChatRoomListScreen(
                     ) {
                         Button(onClick = {
                             if (name.isNotBlank()) {
-                                roomViewModel.createRoom(name, description, isPrivate)
+                                roomViewModel.createRoom(name, description, category, isPrivate)
                                 name = ""
                                 description = ""
+                                category = ""
                                 isPrivate = false
                                 showDialog = false
                             }
@@ -325,11 +377,83 @@ fun ChatRoomListScreen(
                             showDialog = false
                             name = ""
                             description = ""
+                            category = ""
                             isPrivate = false
                         }) { Text("Cancel") }
                     }
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun RecommendationSection(
+    rooms: List<Room>,
+    subtitle: String,
+    onRoomClicked: (Room) -> Unit
+) {
+    Column {
+        Text(
+            text = "Recommended for you",
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = subtitle,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 13.sp
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(rooms, key = { it.id }) { room ->
+                Card(
+                    modifier = Modifier
+                        .width(240.dp)
+                        .clickable { onRoomClicked(room) },
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = room.name,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 16.sp,
+                            maxLines = 2
+                        )
+                        if (room.category.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface
+                                )
+                            ) {
+                                Text(
+                                    text = room.category,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = if (room.description.isBlank()) "Open the room to see more details." else room.description,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp,
+                            maxLines = 3,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "${room.members.size} ${if (room.members.size == 1) "member" else "members"}",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -448,6 +572,18 @@ fun RoomItem(
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                 fontSize = 10.sp,
                                 color = MaterialTheme.colorScheme.onSecondary
+                            )
+                        }
+                    }
+
+                    if (room.category.isNotBlank() && !room.isDirect) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                            Text(
+                                text = room.category,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -601,5 +737,15 @@ private fun formatMessageTime(timestamp: Long): String {
             val format = java.text.SimpleDateFormat("MMM dd", java.util.Locale.getDefault())
             format.format(date)
         }
+    }
+}
+
+private fun formatRecommendationSource(source: String): String {
+    return when (source.uppercase()) {
+        "GRAPH_SAGE" -> "Cached GraphSAGE recommendations"
+        "LIGHT_GCN" -> "Cached LightGCN recommendations"
+        "CONTENT_BASED" -> "Cached content-based recommendations"
+        "POPULARITY_FALLBACK" -> "Popularity fallback"
+        else -> "Cached recommendation results"
     }
 }

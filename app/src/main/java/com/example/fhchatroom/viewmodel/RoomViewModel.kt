@@ -153,14 +153,15 @@ class RoomViewModel : ViewModel() {
         messageListeners.clear()
     }
 
-    fun createRoom(name: String, description: String) =
-        createRoom(name, description, isPrivate = false)
+    fun createRoom(name: String, description: String, category: String = "") =
+        createRoom(name, description, category, isPrivate = false)
 
-    fun createRoom(name: String, description: String, isPrivate: Boolean) {
+    fun createRoom(name: String, description: String, category: String, isPrivate: Boolean) {
         val email = FirebaseAuth.getInstance().currentUser?.email
         val newRoom = Room(
-            name = name,
-            description = description,
+            name = name.trim(),
+            description = description.trim(),
+            category = category.trim(),
             members = email?.let { listOf(it) } ?: emptyList(),
             ownerEmail = email ?: "",
             isPrivate = isPrivate,
