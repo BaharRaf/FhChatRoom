@@ -34,7 +34,8 @@ import com.example.fhchatroom.viewmodel.AuthViewModel
 @Composable
 fun SignUpScreen(
     authViewModel: AuthViewModel,
-    onNavigateToLogin: () -> Unit
+    onNavigateToLogin: () -> Unit,
+    onSignUpSuccess: () -> Unit
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -44,6 +45,10 @@ fun SignUpScreen(
     var semesterInput by remember { mutableStateOf("") }
     val result by authViewModel.authResult.observeAsState()
     val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        authViewModel.clearAuthResult()
+    }
 
     Column(
         modifier = Modifier
@@ -155,7 +160,8 @@ fun SignUpScreen(
         when (val r = result) {
             is Result.Success -> {
                 Toast.makeText(context, "Account created successfully", Toast.LENGTH_SHORT).show()
-                onNavigateToLogin()
+                authViewModel.clearAuthResult()
+                onSignUpSuccess()
             }
             is Result.Error -> {
                 r.exception?.message?.let { msg ->
