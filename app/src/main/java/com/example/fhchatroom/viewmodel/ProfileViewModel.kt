@@ -10,6 +10,7 @@ import com.example.fhchatroom.Injection
 import com.example.fhchatroom.data.User
 import com.example.fhchatroom.data.normalizeStudyPath
 import com.example.fhchatroom.data.semesterBucketFor
+import com.example.fhchatroom.data.toUserOrNull
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.launch
@@ -39,7 +40,7 @@ class ProfileViewModel : ViewModel() {
             .document(email)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) return@addSnapshotListener
-                _currentUser.value = snapshot?.toObject(User::class.java)
+                _currentUser.value = snapshot?.toUserOrNull()
             }
     }
 

@@ -5,6 +5,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import com.example.fhchatroom.Injection
 import com.example.fhchatroom.data.User
+import com.example.fhchatroom.data.toUserOrNull
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ListenerRegistration
 
@@ -36,7 +37,7 @@ class RecommendationViewModel : ViewModel() {
                     return@addSnapshotListener
                 }
 
-                val user = snapshot?.toObject(User::class.java) ?: return@addSnapshotListener
+                val user = snapshot?.toUserOrNull() ?: return@addSnapshotListener
                 _uiState.value = RecommendationUiState(
                     roomIds = user.recommendedRoomIds,
                     generatedAt = user.recommendationsUpdatedAt,
