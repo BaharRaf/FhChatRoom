@@ -6,6 +6,7 @@ from collections import Counter
 from collections import defaultdict
 from dataclasses import asdict
 from dataclasses import dataclass
+from statistics import median
 from typing import Any
 
 from recsys.models import HINGraph
@@ -23,6 +24,8 @@ class GraphSAGEConfig:
     max_neighbors: int = 15
     batch_size: int = 128
     negative_samples_per_positive: int = 3
+    hard_negative_ratio: float = 0.67
+    hard_negative_pool_factor: int = 4
     cold_start_interaction_threshold: int = 5
     seed: int = 42
 
@@ -37,9 +40,11 @@ class GraphSAGEPreparedData:
     relation_adjacency: dict[str, dict[str, list[str]]]
     positive_pairs: list[tuple[str, str]]
     negative_pairs: list[tuple[str, str]]
+    training_triplets: list[tuple[str, str, str]]
     warm_student_ids: list[str]
     cold_student_ids: list[str]
     relation_counts: dict[str, int]
+    negative_pair_sources: dict[str, int]
     selected_topics: list[str]
     torch_available: bool
 
@@ -50,9 +55,11 @@ class GraphSAGEPreparedData:
             "featureDimension": len(self.feature_names),
             "numPositivePairs": len(self.positive_pairs),
             "numNegativePairs": len(self.negative_pairs),
+            "numTrainingTriplets": len(self.training_triplets),
             "warmStudents": len(self.warm_student_ids),
             "coldStudents": len(self.cold_student_ids),
             "relationCounts": self.relation_counts,
+            "negativePairSources": self.negative_pair_sources,
             "selectedTopics": self.selected_topics,
             "torchAvailable": self.torch_available,
         }
@@ -220,14 +227,58 @@ def _build_adjacency(hin: HINGraph) -> tuple[dict[str, list[str]], dict[str, dic
     return adjacency, relation_adjacency, dict(relation_counts)
 
 
+def _sparse_cosine_similarity(left: dict[str, float], right: dict[str, float]) -> float:
+    if not left or not right:
+        return 0.0
+
+    shared = set(left) & set(right)
+    numerator = sum(left[key] * right[key] for key in shared)
+    left_norm = sum(value * value for value in left.values()) ** 0.5
+    right_norm = sum(value * value for value in right.values()) ** 0.5
+    if left_norm == 0.0 or right_norm == 0.0:
+        return 0.0
+    return numerator / (left_norm * right_norm)
+
+
+def _hard_negative_score(
+    dataset: SyntheticDataset,
+    hin: HINGraph,
+    student_id: str,
+    group_id: str,
+) -> float:
+    student = dataset.students[student_id]
+    group = dataset.groups[group_id]
+
+    topic_similarity = _sparse_cosine_similarity(
+        hin.student_topic_weights.get(student_id, {}),
+        hin.group_topic_weights.get(group_id, {}),
+    )
+    study_path_match = 1.0 if group.primary_study_path == student.study_path else 0.0
+
+    if group.member_ids:
+        group_median = median(dataset.students[member_id].semester for member_id in group.member_ids)
+        semester_proximity = 1.0 / (1.0 + abs(student.semester - group_median))
+    else:
+        semester_proximity = 0.0
+
+    return (
+        (0.65 * topic_similarity)
+        + (0.2 * study_path_match)
+        + (0.15 * semester_proximity)
+    )
+
+
 def _build_training_pairs(
     dataset: SyntheticDataset,
+    hin: HINGraph,
     config: GraphSAGEConfig,
-) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str, str]], dict[str, int]]:
     rng = random.Random(config.seed)
     all_group_ids = list(dataset.groups.keys())
     positive_pairs: list[tuple[str, str]] = []
     negative_pairs: list[tuple[str, str]] = []
+    training_triplets: list[tuple[str, str, str]] = []
+    negative_pair_sources: Counter[str] = Counter()
 
     for student in dataset.students.values():
         joined_group_ids = set(student.joined_group_ids)
@@ -238,13 +289,59 @@ def _build_training_pairs(
         if not negative_candidates:
             continue
 
+        scored_candidates = sorted(
+            negative_candidates,
+            key=lambda group_id: (
+                -_hard_negative_score(dataset, hin, student.id, group_id),
+                group_id,
+            ),
+        )
+
         for group_id in joined_group_ids:
             positive_pairs.append((student.id, group_id))
             sample_count = min(config.negative_samples_per_positive, len(negative_candidates))
-            for negative_group_id in rng.sample(negative_candidates, k=sample_count):
-                negative_pairs.append((student.id, negative_group_id))
+            if sample_count == 0:
+                continue
 
-    return positive_pairs, negative_pairs
+            hard_pool_size = min(
+                len(scored_candidates),
+                max(sample_count, sample_count * config.hard_negative_pool_factor),
+            )
+            hard_pool = scored_candidates[:hard_pool_size]
+            hard_sample_count = min(
+                len(hard_pool),
+                max(1, round(sample_count * config.hard_negative_ratio)),
+            )
+
+            hard_negative_ids = [
+                group_id
+                for group_id in rng.sample(hard_pool, k=hard_sample_count)
+            ]
+            remaining_candidates = [
+                candidate
+                for candidate in negative_candidates
+                if candidate not in set(hard_negative_ids)
+            ]
+            random_sample_count = min(sample_count - len(hard_negative_ids), len(remaining_candidates))
+            random_negative_ids = rng.sample(remaining_candidates, k=random_sample_count) if random_sample_count else []
+
+            selected_negative_ids = hard_negative_ids + random_negative_ids
+            if len(selected_negative_ids) < sample_count:
+                fallback_candidates = [
+                    candidate
+                    for candidate in negative_candidates
+                    if candidate not in set(selected_negative_ids)
+                ]
+                fallback_count = min(sample_count - len(selected_negative_ids), len(fallback_candidates))
+                selected_negative_ids.extend(rng.sample(fallback_candidates, k=fallback_count))
+
+            for negative_group_id in selected_negative_ids:
+                negative_pairs.append((student.id, negative_group_id))
+                training_triplets.append((student.id, group_id, negative_group_id))
+                source = "hard" if negative_group_id in hard_negative_ids else "random"
+                negative_pair_sources[source] += 1
+
+    return positive_pairs, negative_pairs, training_triplets, dict(negative_pair_sources)
 
 
 def _cold_start_split(
@@ -284,7 +381,7 @@ def prepare_graphsage_training_data(
     node_features.update(_topic_vectors(hin, feature_names))
 
     adjacency, relation_adjacency, relation_counts = _build_adjacency(hin)
-    positive_pairs, negative_pairs = _build_training_pairs(dataset, config)
+    positive_pairs, negative_pairs, training_triplets, negative_pair_sources = _build_training_pairs(dataset, hin, config)
     warm_student_ids, cold_student_ids = _cold_start_split(dataset, config)
 
     return GraphSAGEPreparedData(
@@ -296,9 +393,11 @@ def prepare_graphsage_training_data(
         relation_adjacency=relation_adjacency,
         positive_pairs=positive_pairs,
         negative_pairs=negative_pairs,
+        training_triplets=training_triplets,
         warm_student_ids=warm_student_ids,
         cold_student_ids=cold_student_ids,
         relation_counts=relation_counts,
+        negative_pair_sources=negative_pair_sources,
         selected_topics=hin.selected_topics,
         torch_available=torch_available(),
     )

@@ -37,12 +37,15 @@ class GraphSAGEPrepTest(unittest.TestCase):
     def test_pairs_and_splits_are_created(self) -> None:
         self.assertTrue(self.prep.positive_pairs)
         self.assertTrue(self.prep.negative_pairs)
+        self.assertTrue(self.prep.training_triplets)
         self.assertGreaterEqual(len(self.prep.warm_student_ids) + len(self.prep.cold_student_ids), 1)
+        self.assertIn("hard", self.prep.negative_pair_sources)
 
     def test_summary_matches_prepared_data(self) -> None:
         summary = self.prep.summary()
         self.assertEqual(summary["featureDimension"], len(self.prep.feature_names))
         self.assertEqual(summary["numPositivePairs"], len(self.prep.positive_pairs))
+        self.assertEqual(summary["numTrainingTriplets"], len(self.prep.training_triplets))
         self.assertIn("MEMBER_OF", summary["relationCounts"])
 
 

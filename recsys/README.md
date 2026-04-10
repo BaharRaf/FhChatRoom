@@ -22,9 +22,7 @@ This package is the first zero-cost BA2 recommender slice. It runs entirely on y
 
 ## What it does not do yet
 
-- no full GraphSAGE training loop yet
-- no LightGCN baseline yet
-- no Firebase export yet
+- no Firebase write-back yet
 - no differential privacy module yet
 
 ## Run it
@@ -87,11 +85,85 @@ This produces:
 
 - feature names
 - positive student-group pairs
-- negative samples
+- harder mixed negative samples
+- pairwise training triplets
 - warm/cold student split
 - a prep summary for the future trainer
 
 The prep layer is intentionally dependency-light. It works even when `torch` is not installed yet.
+
+## Train the local GraphSAGE-style model
+
+You can now train a lightweight GraphSAGE-style recommender fully offline with NumPy:
+
+```bash
+python3 -m recsys.run_graphsage_train \
+  --mode synthetic \
+  --hard-negative-ratio 0.67 \
+  --output-dir /tmp/recsys-graphsage-train
+```
+
+This writes:
+
+- `graphsage_prep_summary.json`
+- `graphsage_training_summary.json`
+- `graphsage_losses.json`
+- `graphsage_embeddings.json`
+- `graphsage_recommendations.json`
+- `graphsage_firestore_payloads.json`
+
+The trainer now uses:
+
+- relation-weighted HIN aggregation
+- pairwise ranking loss instead of simple pointwise classification
+- a mix of hard negatives and random negatives
+- a hybrid reranker that blends learned embedding similarity with profile and topic signals
+
+## Train the local LightGCN baseline
+
+You can now train a lightweight LightGCN baseline fully offline with NumPy:
+
+```bash
+python3 -m recsys.run_lightgcn_train \
+  --mode synthetic \
+  --hard-negative-ratio 0.67 \
+  --output-dir /tmp/recsys-lightgcn-train
+```
+
+This writes:
+
+- `lightgcn_prep_summary.json`
+- `lightgcn_training_summary.json`
+- `lightgcn_losses.json`
+- `lightgcn_embeddings.json`
+- `lightgcn_recommendations.json`
+- `lightgcn_firestore_payloads.json`
+
+The LightGCN slice intentionally stays close to the thesis baseline comparison:
+
+- it uses only the transductive `Student`-`Group` membership graph
+- it propagates embeddings over the bipartite graph without feature transforms
+- it shares the same offline triplet setup as the GraphSAGE-style trainer for a cleaner model comparison
+
+## Evaluate baseline vs GraphSAGE-style vs LightGCN
+
+```bash
+python3 -m recsys.run_evaluation \
+  --mode synthetic \
+  --output-dir /tmp/recsys-eval
+```
+
+The evaluator currently uses a simple leave-one-out setup and reports:
+
+- `Precision@K`
+- `Recall@K`
+- `NDCG@K`
+- `HitRate@K`
+- `MRR`
+- warm vs cold user splits
+- `coldStartRobustness = NDCG@K(cold) / NDCG@K(warm)`
+- delta vs the baseline for each user segment
+- GraphSAGE vs LightGCN deltas for each user segment
 
 ## Bigger BA-style run
 
@@ -107,6 +179,9 @@ python3 -m recsys.run_demo --students 500 --groups 80 --topics 50 --messages-per
 - `hin.py` turns platform entities into a typed HIN.
 - `baselines.py` gives us a no-training baseline before GraphSAGE.
 - `graphsage_prep.py` builds feature vectors, adjacency, and train/eval splits for the later GraphSAGE trainer.
+- `graphsage_train.py` trains a lightweight local GraphSAGE-style encoder with relation-aware aggregation and pairwise ranking.
+- `lightgcn_train.py` provides the thesis-style transductive baseline on top of `MEMBER_OF` edges only.
+- `evaluation.py` compares baseline vs local GraphSAGE-style vs local LightGCN offline, including warm/cold deltas.
 - `firestore_payloads.json` matches the app contract already implemented on Android.
 
 ## Baseline scoring
