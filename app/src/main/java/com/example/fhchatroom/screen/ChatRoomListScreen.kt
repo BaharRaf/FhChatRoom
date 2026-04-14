@@ -314,7 +314,12 @@ fun ChatRoomListScreen(
                     ) {
                         Button(onClick = {
                             if (name.isNotBlank()) {
-                                roomViewModel.createRoom(name, description, isPrivate)
+                                roomViewModel.createRoom(
+                                    name = name,
+                                    description = description,
+                                    category = "",
+                                    isPrivate = isPrivate
+                                )
                                 name = ""
                                 description = ""
                                 isPrivate = false
