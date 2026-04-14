@@ -143,6 +143,11 @@ fun NavigationGraph(
                     navController.navigate(Screen.LoginScreen.route) {
                         popUpTo(Screen.SignupScreen.route) { inclusive = true }
                     }
+                },
+                onSignUpSuccess = {
+                    navController.navigate(Screen.ChatRoomsScreen.route) {
+                        popUpTo(Screen.SignupScreen.route) { inclusive = true }
+                    }
                 }
             )
         }
