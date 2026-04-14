@@ -64,7 +64,7 @@ val WORKING_AVATARS = listOf(
     "https://source.boringavatars.com/sunset/200/Alan%20Turing?colors=264653,2a9d8f,e9c46a"
 )
 
-// Avatar data class for better organization
+// Avatar data class for better organization.
 data class Avatar(
     val url: String,
     val name: String,
