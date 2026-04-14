@@ -61,10 +61,32 @@ class MessageViewModel : ViewModel() {
     }
 
     fun sendMessage(text: String, replyToMessage: Message? = null) {
-        if (_currentUser.value != null && _roomId.value != null) {
+        val roomId = _roomId.value
+        if (roomId == null) {
+            _sendResult.value = Error(IllegalStateException("No chat room selected"))
+            Log.e("MessageViewModel", "sendMessage called with null roomId")
+            return
+        }
+
+        viewModelScope.launch {
+            // Ensure we have the current user; retry loading once if it hasn't arrived yet.
+            val user = _currentUser.value ?: run {
+                when (val result = userRepository.getCurrentUser()) {
+                    is Success -> {
+                        _currentUser.value = result.data
+                        result.data
+                    }
+                    is Error -> {
+                        _sendResult.value = Error(result.exception)
+                        Log.e("MessageViewModel", "sendMessage: current user unavailable", result.exception)
+                        return@launch
+                    }
+                }
+            }
+
             val messageData = hashMapOf<String, Any>(
-                "senderFirstName" to _currentUser.value!!.firstName,
-                "senderId" to _currentUser.value!!.email,
+                "senderFirstName" to user.firstName,
+                "senderId" to user.email,
                 "text" to text,
                 "timestamp" to FieldValue.serverTimestamp(),
                 "type" to MessageType.TEXT.name,
@@ -72,10 +94,9 @@ class MessageViewModel : ViewModel() {
                 "deletedFor" to emptyList<String>()
             )
 
-            // Add reply fields if replying
             replyToMessage?.let {
                 messageData["replyToMessageId"] = it.id ?: ""
-                messageData["replyToMessageText"] = when(it.type) {
+                messageData["replyToMessageText"] = when (it.type) {
                     MessageType.IMAGE -> "📷 Photo"
                     MessageType.VOICE -> "🎤 Voice message"
                     else -> it.text.take(100)
@@ -83,18 +104,16 @@ class MessageViewModel : ViewModel() {
                 messageData["replyToSenderName"] = it.senderFirstName
             }
 
-            viewModelScope.launch {
-                try {
-                    firestore.collection("rooms")
-                        .document(_roomId.value!!)
-                        .collection("messages")
-                        .add(messageData)
-                        .await()
-                    _sendResult.value = Success(Unit)
-                } catch (e: Exception) {
-                    _sendResult.value = Error(e)
-                    Log.e("MessageViewModel", "Failed to send message", e)
-                }
+            try {
+                firestore.collection("rooms")
+                    .document(roomId)
+                    .collection("messages")
+                    .add(messageData)
+                    .await()
+                _sendResult.value = Success(Unit)
+            } catch (e: Exception) {
+                _sendResult.value = Error(e)
+                Log.e("MessageViewModel", "Failed to send message", e)
             }
         }
     }

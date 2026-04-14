@@ -43,17 +43,35 @@ class UserRepository(
 
 
     suspend fun getCurrentUser(): Result<User> = try {
-        val uid = auth.currentUser?.email
-        if (uid != null) {
+        val firebaseUser = auth.currentUser
+        val email = firebaseUser?.email
+        if (firebaseUser != null && email != null) {
             val userDocument = firestore.collection("users")
-                .document(uid)
+                .document(email)
                 .get()
                 .await()
             val user = userDocument.toObject(User::class.java)
             if (user != null) {
                 Result.Success(user)
             } else {
-                Result.Error(Exception("User data not found"))
+                // Backfill: Firestore profile is missing (can happen if signUp's
+                // second write failed, or the doc was deleted). Reconstruct from
+                // the Firebase Auth profile so the app stays usable.
+                val displayName = firebaseUser.displayName.orEmpty().trim()
+                val (firstName, lastName) = when {
+                    displayName.isEmpty() -> email.substringBefore('@') to ""
+                    displayName.contains(' ') -> {
+                        displayName.substringBefore(' ') to displayName.substringAfter(' ')
+                    }
+                    else -> displayName to ""
+                }
+                val fallback = User(firstName, lastName, email, isOnline = true)
+                try {
+                    saveUserToFirestore(fallback)
+                } catch (_: Exception) {
+                    // Non-fatal: we can still return the in-memory user.
+                }
+                Result.Success(fallback)
             }
         } else {
             Result.Error(Exception("User not authenticated"))
