@@ -19,7 +19,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fhchatroom.Injection
 import com.example.fhchatroom.data.User
-import com.example.fhchatroom.data.toUserOrNull
 import com.example.fhchatroom.viewmodel.RoomViewModel
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.tasks.await
@@ -43,7 +42,7 @@ fun InviteToRoomDialog(
         try {
             val firestore = Injection.instance()
             val snapshot = firestore.collection("users").get().await()
-            val allUsers = snapshot.documents.mapNotNull { it.toUserOrNull() }
+            val allUsers = snapshot.documents.mapNotNull { it.toObject(User::class.java) }
 
             // Filter out current members and current user
             val currentUserEmail = FirebaseAuth.getInstance().currentUser?.email

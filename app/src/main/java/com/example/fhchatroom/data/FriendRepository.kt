@@ -283,7 +283,7 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
                                 .get()
                                 .addOnSuccessListener { userSnapshot ->
                                     val friends = userSnapshot.documents.mapNotNull { userDoc ->
-                                        val user = userDoc.toUserOrNull()
+                                        val user = userDoc.toObject(User::class.java)
                                         user?.let {
                                             Friend(
                                                 email = it.email,
@@ -364,7 +364,7 @@ class FriendsRepository(private val firestore: FirebaseFirestore) {
                 .await()
 
             val userList = users.documents.mapNotNull { doc ->
-                doc.toUserOrNull()
+                doc.toObject(User::class.java)
             }.filter { it.email != currentUserEmail } // Exclude current user
 
             Log.d(TAG, "Found ${userList.size} users matching query")

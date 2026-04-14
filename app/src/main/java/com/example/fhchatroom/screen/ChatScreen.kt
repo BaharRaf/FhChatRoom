@@ -448,9 +448,7 @@ fun ChatScreen(
                     onValueChange = { textState.value = it },
                     placeholder = { Text("Type a message...") },
                     textStyle = TextStyle(fontSize = 16.sp),
-                    singleLine = false,
-                    minLines = 1,
-                    maxLines = 4,
+                    singleLine = true,
                     modifier = Modifier
                         .weight(1f)
                         .padding(horizontal = 8.dp)

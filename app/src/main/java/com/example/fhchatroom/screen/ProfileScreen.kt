@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -62,7 +61,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -90,8 +88,6 @@ fun ProfileScreen(
     var showEditDialog by remember { mutableStateOf(false) }
     var newFirstName by remember { mutableStateOf("") }
     var newLastName by remember { mutableStateOf("") }
-    var newStudyPath by remember { mutableStateOf("") }
-    var newSemesterInput by remember { mutableStateOf("") }
     var showPhotoOptions by remember { mutableStateOf(false) }
     var showAvatarSelector by remember { mutableStateOf(false) }
 
@@ -177,8 +173,6 @@ fun ProfileScreen(
                         currentUser?.let {
                             newFirstName = it.firstName
                             newLastName = it.lastName
-                            newStudyPath = it.studyPath
-                            newSemesterInput = it.semester.toString()
                             showEditDialog = true
                         }
                     }) {
@@ -343,18 +337,6 @@ fun ProfileScreen(
                             icon = Icons.Default.Person,
                             label = "Last Name",
                             value = user.lastName
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-                        ProfileInfoRow(
-                            icon = Icons.Default.School,
-                            label = "Study Path",
-                            value = user.studyPath.ifBlank { "Not set yet" }
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-                        ProfileInfoRow(
-                            icon = Icons.Default.DateRange,
-                            label = "Semester",
-                            value = if (user.semester > 0) "Semester ${user.semester}" else "Not set yet"
                         )
                         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
                         ProfileInfoRow(
@@ -529,48 +511,17 @@ fun ProfileScreen(
                         label = { Text("Last Name") },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = newStudyPath,
-                        onValueChange = { newStudyPath = it },
-                        label = { Text("Study Path") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = newSemesterInput,
-                        onValueChange = { newSemesterInput = it.filter(Char::isDigit).take(2) },
-                        label = { Text("Semester") },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true
-                    )
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val semester = newSemesterInput.toLongOrNull()
-
-                        if (newStudyPath.isBlank() || semester == null || semester !in 1L..12L) {
-                            Toast.makeText(
-                                context,
-                                "Please provide a study path and a semester between 1 and 12",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        } else {
-                            profileViewModel.updateProfile(
-                                firstName = newFirstName,
-                                lastName = newLastName,
-                                studyPath = newStudyPath,
-                                semester = semester
-                            ) { success ->
-                                if (success) {
-                                    Toast.makeText(context, "Profile updated", Toast.LENGTH_SHORT).show()
-                                    showEditDialog = false
-                                } else {
-                                    Toast.makeText(context, "Failed to update profile", Toast.LENGTH_SHORT).show()
-                                }
+                        profileViewModel.updateProfile(newFirstName, newLastName) { success ->
+                            if (success) {
+                                Toast.makeText(context, "Profile updated", Toast.LENGTH_SHORT).show()
+                                showEditDialog = false
+                            } else {
+                                Toast.makeText(context, "Failed to update profile", Toast.LENGTH_SHORT).show()
                             }
                         }
                     }

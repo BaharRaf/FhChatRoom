@@ -15,8 +15,8 @@ import com.example.fhchatroom.data.Result.Error
 import com.example.fhchatroom.data.Result.Success
 import com.example.fhchatroom.data.User
 import com.example.fhchatroom.data.UserRepository
-import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -25,10 +25,6 @@ import java.io.File
 import java.util.UUID
 
 class MessageViewModel : ViewModel() {
-    companion object {
-        private const val ROOM_PREVIEW_MAX_LENGTH = 50
-        private const val MAX_TEXT_MESSAGE_LENGTH = 4000
-    }
 
     private val messageRepository: MessageRepository
     private val userRepository: UserRepository
@@ -65,52 +61,40 @@ class MessageViewModel : ViewModel() {
     }
 
     fun sendMessage(text: String, replyToMessage: Message? = null) {
-        val currentUser = _currentUser.value ?: return
-        val roomId = _roomId.value ?: return
-        val normalizedText = text.trim()
-
-        if (normalizedText.isBlank()) {
-            return
-        }
-        if (normalizedText.length > MAX_TEXT_MESSAGE_LENGTH) {
-            _sendResult.value = Error(
-                IllegalArgumentException("Messages can be at most $MAX_TEXT_MESSAGE_LENGTH characters.")
+        if (_currentUser.value != null && _roomId.value != null) {
+            val messageData = hashMapOf<String, Any>(
+                "senderFirstName" to _currentUser.value!!.firstName,
+                "senderId" to _currentUser.value!!.email,
+                "text" to text,
+                "timestamp" to FieldValue.serverTimestamp(),
+                "type" to MessageType.TEXT.name,
+                "reactions" to emptyMap<String, String>(),
+                "deletedFor" to emptyList<String>()
             )
-            return
-        }
 
-        val messageData = hashMapOf<String, Any>(
-            "senderFirstName" to currentUser.firstName,
-            "senderId" to currentUser.email,
-            "text" to normalizedText,
-            "type" to MessageType.TEXT.name,
-            "reactions" to emptyMap<String, String>(),
-            "deletedFor" to emptyList<String>()
-        )
-
-        replyToMessage?.let {
-            messageData["replyToMessageId"] = it.id ?: ""
-            messageData["replyToMessageText"] = when (it.type) {
-                MessageType.IMAGE -> "📷 Photo"
-                MessageType.VOICE -> "🎤 Voice message"
-                else -> it.text.take(100)
+            // Add reply fields if replying
+            replyToMessage?.let {
+                messageData["replyToMessageId"] = it.id ?: ""
+                messageData["replyToMessageText"] = when(it.type) {
+                    MessageType.IMAGE -> "📷 Photo"
+                    MessageType.VOICE -> "🎤 Voice message"
+                    else -> it.text.take(100)
+                }
+                messageData["replyToSenderName"] = it.senderFirstName
             }
-            messageData["replyToSenderName"] = it.senderFirstName
-        }
 
-        viewModelScope.launch {
-            try {
-                sendMessageWithRoomUpdate(
-                    roomId = roomId,
-                    currentUser = currentUser,
-                    messageData = messageData,
-                    type = MessageType.TEXT,
-                    roomPreviewText = normalizedText
-                )
-                _sendResult.value = Success(Unit)
-            } catch (e: Exception) {
-                _sendResult.value = Error(e)
-                Log.e("MessageViewModel", "Failed to send message", e)
+            viewModelScope.launch {
+                try {
+                    firestore.collection("rooms")
+                        .document(_roomId.value!!)
+                        .collection("messages")
+                        .add(messageData)
+                        .await()
+                    _sendResult.value = Success(Unit)
+                } catch (e: Exception) {
+                    _sendResult.value = Error(e)
+                    Log.e("MessageViewModel", "Failed to send message", e)
+                }
             }
         }
     }
@@ -132,24 +116,22 @@ class MessageViewModel : ViewModel() {
                 uploadTask.await()
                 val downloadUrl = storageRef.downloadUrl.await().toString()
 
-                val currentUser = _currentUser.value ?: throw IllegalStateException("Current user not loaded")
                 val messageData = hashMapOf<String, Any>(
-                    "senderFirstName" to currentUser.firstName,
-                    "senderId" to currentUser.email,
+                    "senderFirstName" to _currentUser.value!!.firstName,
+                    "senderId" to _currentUser.value!!.email,
                     "text" to "Photo",
+                    "timestamp" to FieldValue.serverTimestamp(),
                     "type" to MessageType.IMAGE.name,
                     "mediaUrl" to downloadUrl,
                     "reactions" to emptyMap<String, String>(),
                     "deletedFor" to emptyList<String>()
                 )
 
-                sendMessageWithRoomUpdate(
-                    roomId = roomId,
-                    currentUser = currentUser,
-                    messageData = messageData,
-                    type = MessageType.IMAGE,
-                    roomPreviewText = "📷 Photo"
-                )
+                firestore.collection("rooms")
+                    .document(roomId)
+                    .collection("messages")
+                    .add(messageData)
+                    .await()
 
                 _sendResult.value = Success(Unit)
                 _uploadProgress.value = 100f
@@ -181,24 +163,22 @@ class MessageViewModel : ViewModel() {
                 uploadTask.await()
                 val downloadUrl = storageRef.downloadUrl.await().toString()
 
-                val currentUser = _currentUser.value ?: throw IllegalStateException("Current user not loaded")
                 val messageData = hashMapOf<String, Any>(
-                    "senderFirstName" to currentUser.firstName,
-                    "senderId" to currentUser.email,
+                    "senderFirstName" to _currentUser.value!!.firstName,
+                    "senderId" to _currentUser.value!!.email,
                     "text" to "Photo",
+                    "timestamp" to FieldValue.serverTimestamp(),
                     "type" to MessageType.IMAGE.name,
                     "mediaUrl" to downloadUrl,
                     "reactions" to emptyMap<String, String>(),
                     "deletedFor" to emptyList<String>()
                 )
 
-                sendMessageWithRoomUpdate(
-                    roomId = roomId,
-                    currentUser = currentUser,
-                    messageData = messageData,
-                    type = MessageType.IMAGE,
-                    roomPreviewText = "📷 Photo"
-                )
+                firestore.collection("rooms")
+                    .document(roomId)
+                    .collection("messages")
+                    .add(messageData)
+                    .await()
 
                 _sendResult.value = Success(Unit)
                 _uploadProgress.value = 100f
@@ -228,11 +208,11 @@ class MessageViewModel : ViewModel() {
 
                 audioFile.delete()
 
-                val currentUser = _currentUser.value ?: throw IllegalStateException("Current user not loaded")
                 val messageData = hashMapOf<String, Any>(
-                    "senderFirstName" to currentUser.firstName,
-                    "senderId" to currentUser.email,
+                    "senderFirstName" to _currentUser.value!!.firstName,
+                    "senderId" to _currentUser.value!!.email,
                     "text" to "Voice message",
+                    "timestamp" to FieldValue.serverTimestamp(),
                     "type" to MessageType.VOICE.name,
                     "mediaUrl" to downloadUrl,
                     "mediaDuration" to duration,
@@ -240,13 +220,11 @@ class MessageViewModel : ViewModel() {
                     "deletedFor" to emptyList<String>()
                 )
 
-                sendMessageWithRoomUpdate(
-                    roomId = roomId,
-                    currentUser = currentUser,
-                    messageData = messageData,
-                    type = MessageType.VOICE,
-                    roomPreviewText = "🎤 Voice message"
-                )
+                firestore.collection("rooms")
+                    .document(roomId)
+                    .collection("messages")
+                    .add(messageData)
+                    .await()
 
                 _sendResult.value = Success(Unit)
                 _uploadProgress.value = 100f
@@ -305,6 +283,7 @@ class MessageViewModel : ViewModel() {
                 val forwardData = hashMapOf<String, Any>(
                     "senderFirstName" to currentUser.firstName,
                     "senderId" to currentUser.email,
+                    "timestamp" to FieldValue.serverTimestamp(),
                     "reactions" to emptyMap<String, String>(),
                     "deletedFor" to emptyList<String>()
                 )
@@ -328,14 +307,11 @@ class MessageViewModel : ViewModel() {
                     }
                 }
 
-                val forwardType = MessageType.valueOf(forwardData["type"] as String)
-                sendMessageWithRoomUpdate(
-                    roomId = toRoomId,
-                    currentUser = currentUser,
-                    messageData = forwardData,
-                    type = forwardType,
-                    roomPreviewText = forwardData["text"] as? String ?: ""
-                )
+                firestore.collection("rooms")
+                    .document(toRoomId)
+                    .collection("messages")
+                    .add(forwardData)
+                    .await()
 
                 Log.d("MessageViewModel", "Message forwarded successfully to room: $toRoomId")
 
@@ -380,52 +356,6 @@ class MessageViewModel : ViewModel() {
     fun deleteMessageForMe(roomId: String, messageId: String, userEmail: String) {
         viewModelScope.launch {
             messageRepository.deleteMessageForMe(roomId, messageId, userEmail)
-        }
-    }
-
-    private suspend fun sendMessageWithRoomUpdate(
-        roomId: String,
-        currentUser: User,
-        messageData: HashMap<String, Any>,
-        type: MessageType,
-        roomPreviewText: String
-    ) {
-        val timestamp = Timestamp.now()
-        val messageRef = firestore.collection("rooms")
-            .document(roomId)
-            .collection("messages")
-            .document()
-
-        val payload = HashMap(messageData).apply {
-            put("timestamp", timestamp)
-        }
-
-        val previewText = when (type) {
-            MessageType.IMAGE -> "📷 Photo"
-            MessageType.VOICE -> "🎤 Voice message"
-            MessageType.TEXT -> buildPreviewText(roomPreviewText)
-        }
-
-        val batch = firestore.batch()
-        batch.set(messageRef, payload)
-        batch.update(
-            firestore.collection("rooms").document(roomId),
-            mapOf(
-                "lastMessage" to previewText,
-                "lastMessageSender" to currentUser.firstName,
-                "lastMessageTimestamp" to timestamp.toDate().time,
-                "lastMessageType" to type.name
-            )
-        )
-        batch.commit().await()
-    }
-
-    private fun buildPreviewText(text: String): String {
-        val compact = text.trim().replace(Regex("\\s+"), " ")
-        return if (compact.length <= ROOM_PREVIEW_MAX_LENGTH) {
-            compact
-        } else {
-            compact.take(ROOM_PREVIEW_MAX_LENGTH - 3) + "..."
         }
     }
 }

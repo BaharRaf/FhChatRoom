@@ -4,7 +4,6 @@ data class Room(
     val id: String = "",
     val name: String = "",
     val description: String = "",
-    val category: String = "",
     val members: List<String> = emptyList(),
     val ownerEmail: String = "",
     val lastMessage: String = "",

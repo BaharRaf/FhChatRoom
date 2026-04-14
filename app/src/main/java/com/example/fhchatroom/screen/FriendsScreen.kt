@@ -1,6 +1,5 @@
 package com.example.fhchatroom.screen
 
-import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -50,13 +49,9 @@ fun FriendsScreen(
     // Real-time users listener
     DisposableEffect(Unit) {
         reg = firestore.collection("users")
-            .addSnapshotListener { snap, err ->
-                if (err != null) {
-                    Log.e("FriendsScreen", "Users listener failed", err)
-                    return@addSnapshotListener
-                }
+            .addSnapshotListener { snap, _ ->
                 users = snap?.documents
-                    ?.mapNotNull { it.toUserOrNull() }
+                    ?.mapNotNull { it.toObject(User::class.java) }
                     ?.filter { it.email.isNotBlank() && it.email.contains("@") && it.email != currentUserEmail }
                     ?: emptyList()
             }

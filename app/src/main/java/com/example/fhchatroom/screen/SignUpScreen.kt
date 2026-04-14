@@ -24,8 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.fhchatroom.data.Result
 import com.example.fhchatroom.viewmodel.AuthViewModel
@@ -34,21 +32,14 @@ import com.example.fhchatroom.viewmodel.AuthViewModel
 @Composable
 fun SignUpScreen(
     authViewModel: AuthViewModel,
-    onNavigateToLogin: () -> Unit,
-    onSignUpSuccess: () -> Unit
+    onNavigateToLogin: () -> Unit
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var firstName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
-    var studyPath by remember { mutableStateOf("") }
-    var semesterInput by remember { mutableStateOf("") }
     val result by authViewModel.authResult.observeAsState()
     val context = LocalContext.current
-
-    LaunchedEffect(Unit) {
-        authViewModel.clearAuthResult()
-    }
 
     Column(
         modifier = Modifier
@@ -90,55 +81,22 @@ fun SignUpScreen(
                 .fillMaxWidth()
                 .padding(8.dp)
         )
-        OutlinedTextField(
-            value = studyPath,
-            onValueChange = { studyPath = it },
-            label = { Text("Study Path") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp)
-        )
-        OutlinedTextField(
-            value = semesterInput,
-            onValueChange = { semesterInput = it.filter(Char::isDigit).take(2) },
-            label = { Text("Semester") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            singleLine = true
-        )
 
         Button(
             onClick = {
-                val semester = semesterInput.toLongOrNull()
-
                 // Use ignoreCase true in case the user inputs uppercase letters.
                 if (!email.trim().endsWith("@stud.fh-campuswien.ac.at", ignoreCase = true)) {
                     // **Updated**: Show validation errors with Toast (disappear after a few seconds)
                     Toast.makeText(context, "Please use your institutional email (@stud.fh-campuswien.ac.at)", Toast.LENGTH_LONG).show()
                 } else if (password.length < 8 || password.all { it.isLetterOrDigit() }) {
                     Toast.makeText(context, "Password must be at least 8 characters long and include at least one special character", Toast.LENGTH_LONG).show()
-                } else if (studyPath.isBlank()) {
-                    Toast.makeText(context, "Please enter your study path", Toast.LENGTH_LONG).show()
-                } else if (semester == null || semester !in 1L..12L) {
-                    Toast.makeText(context, "Please enter a semester between 1 and 12", Toast.LENGTH_LONG).show()
                 } else {
-                    authViewModel.signUp(
-                        email = email,
-                        password = password,
-                        firstName = firstName,
-                        lastName = lastName,
-                        studyPath = studyPath,
-                        semester = semester
-                    )
+                    authViewModel.signUp(email, password, firstName, lastName)
                     // Clear the input fields after attempting sign up.
                     email = ""
                     password = ""
                     firstName = ""
                     lastName = ""
-                    studyPath = ""
-                    semesterInput = ""
                 }
             },
             modifier = Modifier
@@ -160,8 +118,7 @@ fun SignUpScreen(
         when (val r = result) {
             is Result.Success -> {
                 Toast.makeText(context, "Account created successfully", Toast.LENGTH_SHORT).show()
-                authViewModel.clearAuthResult()
-                onSignUpSuccess()
+                onNavigateToLogin()
             }
             is Result.Error -> {
                 r.exception?.message?.let { msg ->

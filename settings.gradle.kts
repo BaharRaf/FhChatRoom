@@ -21,6 +21,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "FhChatRoom-BA_Rafiee"
+rootProject.name = "FhChatRoom"
 include(":app")
+
 

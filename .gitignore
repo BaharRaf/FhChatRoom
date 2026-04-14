@@ -14,7 +14,6 @@ Desktop.ini
 *.iml
 *.iws
 out/
-.kotlin/
 
 # Gradle
 .gradle/
@@ -43,9 +42,3 @@ proguard/
 
 # Optional: Node.js dependencies (if you use any)
 node_modules/
-
-# Python
-__pycache__/
-.pytest_cache/
-*.pyc
-recsys/output/

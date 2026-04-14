@@ -1,13 +1,16 @@
 package com.example.fhchatroom.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import com.example.fhchatroom.Injection
 import com.example.fhchatroom.data.Room
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ktx.toObject
 
 class RoomViewModel : ViewModel() {
@@ -17,6 +20,7 @@ class RoomViewModel : ViewModel() {
 
     private val firestore = Injection.instance()
     private var roomListener: ListenerRegistration? = null
+    private val messageListeners = mutableMapOf<String, ListenerRegistration>()
     private val auth = FirebaseAuth.getInstance()
 
     init {
@@ -62,24 +66,101 @@ class RoomViewModel : ViewModel() {
 
                     _rooms.value = updatedRooms
 
+                    // Prune listeners for rooms no longer present
+                    val newIds = updatedRooms.map { it.id }.toSet()
+                    val toRemove = messageListeners.keys - newIds
+                    toRemove.forEach { id ->
+                        messageListeners.remove(id)?.remove()
+                    }
+
+                    // Observe last message for each room (existing + new)
+                    updatedRooms.forEach { room ->
+                        observeLastMessageForRoom(room.id)
+                    }
                 }
             }
+    }
+
+    private fun observeLastMessageForRoom(roomId: String) {
+        // Remove existing listener if any
+        messageListeners[roomId]?.remove()
+
+        // Add new listener for the last message
+        val listener = firestore.collection("rooms")
+            .document(roomId)
+            .collection("messages")
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(1)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null || snapshot == null) return@addSnapshotListener
+
+                val doc = snapshot.documents.firstOrNull() ?: return@addSnapshotListener
+
+                try {
+                    // Manually extract fields to handle both Long and Timestamp types
+                    // DO NOT use toObject<Message>() as it may fail with type mismatch
+                    val text = doc.getString("text") ?: ""
+                    val senderFirstName = doc.getString("senderFirstName") ?: ""
+                    val type = doc.getString("type") ?: "TEXT"
+
+                    // Handle timestamp - can be Long (old data) or Timestamp (new data with server timestamp)
+                    val timestamp: Long = when (val ts = doc.get("timestamp")) {
+                        is Long -> ts
+                        is Timestamp -> ts.toDate().time
+                        is Number -> ts.toLong()
+                        else -> System.currentTimeMillis()
+                    }
+
+                    // Update the room with last message info
+                    updateRoomWithLastMessage(roomId, text, senderFirstName, timestamp, type)
+                } catch (e: Exception) {
+                    Log.e("RoomViewModel", "Error parsing last message for room $roomId", e)
+                }
+            }
+
+        messageListeners[roomId] = listener
+    }
+
+    private fun updateRoomWithLastMessage(
+        roomId: String,
+        text: String,
+        senderFirstName: String,
+        timestamp: Long,
+        type: String
+    ) {
+        val displayText = when (type) {
+            "IMAGE" -> "📷 Photo"
+            "VOICE" -> "🎤 Voice message"
+            else -> text.take(50)
+        }
+
+        val updates = hashMapOf<String, Any>(
+            "lastMessage" to displayText,
+            "lastMessageSender" to senderFirstName,
+            "lastMessageTimestamp" to timestamp,
+            "lastMessageType" to type
+        )
+
+        firestore.collection("rooms")
+            .document(roomId)
+            .update(updates)
     }
 
     override fun onCleared() {
         super.onCleared()
         roomListener?.remove()
+        messageListeners.values.forEach { it.remove() }
+        messageListeners.clear()
     }
 
-    fun createRoom(name: String, description: String, category: String = "") =
-        createRoom(name, description, category, isPrivate = false)
+    fun createRoom(name: String, description: String) =
+        createRoom(name, description, isPrivate = false)
 
-    fun createRoom(name: String, description: String, category: String, isPrivate: Boolean) {
+    fun createRoom(name: String, description: String, isPrivate: Boolean) {
         val email = FirebaseAuth.getInstance().currentUser?.email
         val newRoom = Room(
-            name = name.trim(),
-            description = description.trim(),
-            category = category.trim(),
+            name = name,
+            description = description,
             members = email?.let { listOf(it) } ?: emptyList(),
             ownerEmail = email ?: "",
             isPrivate = isPrivate,
@@ -194,6 +275,7 @@ class RoomViewModel : ViewModel() {
     }
 
     fun deleteRoom(roomId: String) {
+        messageListeners.remove(roomId)?.remove()
         firestore.collection("rooms").document(roomId).delete()
     }
 

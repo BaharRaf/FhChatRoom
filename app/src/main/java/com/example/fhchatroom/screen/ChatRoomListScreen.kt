@@ -51,7 +51,6 @@ import androidx.compose.ui.unit.sp
 import com.example.fhchatroom.Injection
 import com.example.fhchatroom.data.Room
 import com.example.fhchatroom.data.User
-import com.example.fhchatroom.data.toUserOrNull
 import com.example.fhchatroom.viewmodel.RoomViewModel
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.tasks.await
@@ -314,12 +313,7 @@ fun ChatRoomListScreen(
                     ) {
                         Button(onClick = {
                             if (name.isNotBlank()) {
-                                roomViewModel.createRoom(
-                                    name = name,
-                                    description = description,
-                                    category = "",
-                                    isPrivate = isPrivate
-                                )
+                                roomViewModel.createRoom(name, description, isPrivate)
                                 name = ""
                                 description = ""
                                 isPrivate = false
@@ -415,7 +409,7 @@ fun RoomItem(
                                     .limit(1)
                                     .get()
                                     .await()
-                                val user = qs.documents.firstOrNull()?.toUserOrNull()
+                                val user = qs.documents.firstOrNull()?.toObject(User::class.java)
                                 val full = listOfNotNull(user?.firstName?.trim(), user?.lastName?.trim())
                                     .joinToString(" ")
                                     .trim()

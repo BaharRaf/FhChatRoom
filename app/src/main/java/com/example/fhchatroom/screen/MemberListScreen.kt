@@ -59,7 +59,6 @@ import com.example.fhchatroom.data.FriendshipStatus
 import com.example.fhchatroom.data.Result
 import com.example.fhchatroom.data.Room
 import com.example.fhchatroom.data.User
-import com.example.fhchatroom.data.toUserOrNull
 import com.example.fhchatroom.viewmodel.FriendsViewModel
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
@@ -153,7 +152,7 @@ fun MemberListScreen(
                                 }
                                 val users = snapshots
                                     .flatMap { it.documents }
-                                    .mapNotNull { it.toUserOrNull() }
+                                    .mapNotNull { it.toObject(User::class.java) }
 
                                 // initialize all as offline
                                 members = users.map { it.copy(isOnline = false) }

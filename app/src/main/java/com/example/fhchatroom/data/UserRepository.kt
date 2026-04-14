@@ -2,7 +2,6 @@ package com.example.fhchatroom.data
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.tasks.await
 
 class UserRepository(
@@ -27,51 +26,13 @@ class UserRepository(
 
     suspend fun login(email: String, password: String): Result<Boolean> = try {
         auth.signInWithEmailAndPassword(email, password).await()
-        ensureUserDocumentExists(auth.currentUser?.email ?: email.trim())
+
+
         Result.Success(true)
     } catch(e: Exception) {
         Result.Error(e)
     }
 
-    private suspend fun ensureUserDocumentExists(email: String) {
-        val normalizedEmail = email.trim()
-        if (normalizedEmail.isBlank()) return
-
-        val document = firestore.collection("users")
-            .document(normalizedEmail)
-            .get()
-            .await()
-
-        if (document.exists()) return
-
-        val fallbackUser = buildFallbackUser(normalizedEmail)
-        firestore.collection("users")
-            .document(normalizedEmail)
-            .set(fallbackUser, SetOptions.merge())
-            .await()
-    }
-
-    private fun buildFallbackUser(email: String): User {
-        val localPart = email.substringBefore("@").trim()
-        val readableLocalPart = localPart
-            .replace(".", " ")
-            .replace("_", " ")
-            .replace("-", " ")
-            .trim()
-
-        val fallbackFirstName = readableLocalPart
-            .split("\\s+".toRegex())
-            .firstOrNull()
-            ?.replaceFirstChar { it.uppercase() }
-            .orEmpty()
-
-        return User(
-            firstName = fallbackFirstName,
-            lastName = "",
-            email = email,
-            isOnline = false
-        )
-    }
 
     private suspend fun saveUserToFirestore(user: User) {
         firestore.collection("users")
@@ -88,7 +49,7 @@ class UserRepository(
                 .document(uid)
                 .get()
                 .await()
-            val user = userDocument.toUserOrNull()
+            val user = userDocument.toObject(User::class.java)
             if (user != null) {
                 Result.Success(user)
             } else {
@@ -105,7 +66,7 @@ class UserRepository(
             .document(email)
             .get()
             .await()
-        val user = userDocument.toUserOrNull()
+        val user = userDocument.toObject(User::class.java)
         if (user != null) {
             Result.Success(user)
         } else {
