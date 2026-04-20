@@ -100,8 +100,8 @@ class MainActivity : ComponentActivity() {
                     if (email != null) {
                         when (event) {
                             Lifecycle.Event.ON_START -> {
-                                coroutineScope.launch {
-                                    onlineStatusUpdater = OnlineStatusUpdater()
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    onlineStatusUpdater.goOnline()
                                 }
                             }
                             Lifecycle.Event.ON_STOP -> {
