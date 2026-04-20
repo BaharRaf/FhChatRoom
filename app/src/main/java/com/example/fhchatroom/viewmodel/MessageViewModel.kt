@@ -377,4 +377,16 @@ class MessageViewModel : ViewModel() {
             messageRepository.deleteMessageForMe(roomId, messageId, userEmail)
         }
     }
+
+    fun editMessage(roomId: String, messageId: String, newText: String) {
+        val trimmed = newText.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                messageRepository.editMessage(roomId, messageId, trimmed)
+            } catch (e: Exception) {
+                Log.e("MessageViewModel", "Failed to edit message $messageId", e)
+            }
+        }
+    }
 }

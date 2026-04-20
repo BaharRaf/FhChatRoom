@@ -6,6 +6,7 @@ import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.tasks.await
 import java.util.Date
 
 class MessageRepository(private val firestore: FirebaseFirestore) {
@@ -60,6 +61,7 @@ class MessageRepository(private val firestore: FirebaseFirestore) {
                             val replyToMessageId = doc.getString("replyToMessageId")
                             val replyToMessageText = doc.getString("replyToMessageText")
                             val replyToSenderName = doc.getString("replyToSenderName")
+                            val edited = doc.getBoolean("edited") ?: false
 
                             Message(
                                 senderFirstName = senderFirstName,
@@ -75,7 +77,8 @@ class MessageRepository(private val firestore: FirebaseFirestore) {
                                 reactions = reactions,
                                 replyToMessageId = replyToMessageId,
                                 replyToMessageText = replyToMessageText,
-                                replyToSenderName = replyToSenderName
+                                replyToSenderName = replyToSenderName,
+                                edited = edited
                             )
                         } catch (e: Exception) {
                             null
@@ -102,5 +105,14 @@ class MessageRepository(private val firestore: FirebaseFirestore) {
             .collection("messages")
             .document(messageId)
             .update("deletedFor", com.google.firebase.firestore.FieldValue.arrayUnion(userEmail))
+    }
+
+    suspend fun editMessage(roomId: String, messageId: String, newText: String) {
+        firestore.collection("rooms")
+            .document(roomId)
+            .collection("messages")
+            .document(messageId)
+            .update(mapOf("text" to newText, "edited" to true))
+            .await()
     }
 }
