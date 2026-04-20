@@ -81,6 +81,10 @@ fun ChatScreen(
     var showForwardDialog by remember { mutableStateOf(false) }
     var messageToForward by remember { mutableStateOf<Message?>(null) }
 
+    // Edit state
+    var messageToEdit by remember { mutableStateOf<Message?>(null) }
+    var editText by remember { mutableStateOf("") }
+
     // Search states
     var showSearchBar by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -329,6 +333,10 @@ fun ChatScreen(
                         messageToForward = message
                         showForwardDialog = true
                     },
+                    onEdit = {
+                        messageToEdit = message
+                        editText = message.text
+                    },
                     currentUserId = messageViewModel.currentUser.value?.email ?: ""
                 )
             }
@@ -540,6 +548,50 @@ fun ChatScreen(
         )
     }
 
+    // Edit dialog
+    if (messageToEdit != null) {
+        val editing = messageToEdit!!
+        AlertDialog(
+            onDismissRequest = {
+                messageToEdit = null
+                editText = ""
+            },
+            title = { Text("Edit Message") },
+            text = {
+                OutlinedTextField(
+                    value = editText,
+                    onValueChange = { editText = it },
+                    placeholder = { Text("Message text") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val newText = editText.trim()
+                        val messageId = editing.id
+                        if (messageId != null && newText.isNotEmpty() && newText != editing.text) {
+                            messageViewModel.editMessage(roomId, messageId, newText)
+                        }
+                        messageToEdit = null
+                        editText = ""
+                    },
+                    enabled = editText.trim().isNotEmpty() && editText.trim() != editing.text
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    messageToEdit = null
+                    editText = ""
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     // Forward dialog
     if (showForwardDialog && messageToForward != null) {
         ForwardMessageDialog(
@@ -587,6 +639,7 @@ fun ChatMessageItem(
     onDelete: () -> Unit = {},
     onDeleteForEveryone: () -> Unit = {},
     onForward: () -> Unit = {},
+    onEdit: () -> Unit = {},
     currentUserId: String = ""
 ) {
     var isPlaying by remember { mutableStateOf(false) }
@@ -767,6 +820,13 @@ fun ChatMessageItem(
                 text = formatTimestamp(message.timestamp),
                 style = TextStyle(fontSize = 12.sp, color = Color.Gray)
             )
+            if (message.edited) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "(edited)",
+                    style = TextStyle(fontSize = 12.sp, color = Color.Gray)
+                )
+            }
         }
 
         // Reaction picker
@@ -864,6 +924,24 @@ fun ChatMessageItem(
                                 Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Text("Copy Message")
+                            }
+                        }
+
+                        // Edit (own text messages only)
+                        if (message.type == MessageType.TEXT && message.senderId == currentUserId) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        showOptions = false
+                                        onEdit()
+                                    }
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit")
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text("Edit Message")
                             }
                         }
 

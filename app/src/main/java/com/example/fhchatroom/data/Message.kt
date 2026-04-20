@@ -18,7 +18,8 @@ data class Message(
     val reactions: Map<String, String> = emptyMap(), // userId to emoji
     val replyToMessageId: String? = null, // ID of message being replied to
     val replyToMessageText: String? = null, // Text of original message
-    val replyToSenderName: String? = null // Name of original sender
+    val replyToSenderName: String? = null, // Name of original sender
+    val edited: Boolean = false // True if the message text has been edited
 ) {
     // Helper property to get timestamp as Long for backwards compatibility
     val timestampMillis: Long
